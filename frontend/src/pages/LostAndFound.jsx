@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
+import pawsBg    from '../assets/Mask group.png';
+import corgiImg  from '../assets/Group 88.png';
+import catImg    from '../assets/Rectangle 390.png';
+import greenRect from '../assets/Rectangle 477.png';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -34,17 +38,17 @@ function ReportModal({ defaultType, onClose, onSuccess }) {
   const { user } = useAuth();
   const [form, setForm] = useState({
     first_name: user?.first_name || '',
-    last_name: user?.last_name || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
+    last_name:  user?.last_name  || '',
+    email:      user?.email      || '',
+    phone:      user?.phone      || '',
     type: defaultType || 'Lost',
     pet_name: '',
     pet_description: '',
     last_seen_location: '',
   });
-  const [photo, setPhoto] = useState(null);
+  const [photo, setPhoto]         = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError]         = useState('');
   const fileRef = useRef();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -58,15 +62,15 @@ function ReportModal({ defaultType, onClose, onSuccess }) {
     setError('');
     try {
       const fd = new FormData();
-      fd.append('reporter_name', `${form.first_name} ${form.last_name}`);
-      fd.append('reporter_email', form.email);
-      fd.append('reporter_phone', form.phone);
-      fd.append('type', form.type);
-      fd.append('pet_name', form.pet_name);
-      fd.append('pet_description', form.pet_description);
-      fd.append('last_seen_location', form.last_seen_location);
+      fd.append('reporter_name',       `${form.first_name} ${form.last_name}`);
+      fd.append('reporter_email',      form.email);
+      fd.append('reporter_phone',      form.phone);
+      fd.append('type',                form.type);
+      fd.append('pet_name',            form.pet_name);
+      fd.append('pet_description',     form.pet_description);
+      fd.append('last_seen_location',  form.last_seen_location);
       if (user?.id) fd.append('user_id', user.id);
-      if (photo) fd.append('photo', photo);
+      if (photo)    fd.append('photo',   photo);
 
       await fetch(`${API_BASE}/api/lostfound`, { method: 'POST', body: fd });
       onSuccess();
@@ -89,7 +93,7 @@ function ReportModal({ defaultType, onClose, onSuccess }) {
         <label style={lbl}>Your name</label>
         <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
           <input style={inp} placeholder="First name" value={form.first_name} onChange={e => set('first_name', e.target.value)} />
-          <input style={inp} placeholder="Last name" value={form.last_name} onChange={e => set('last_name', e.target.value)} />
+          <input style={inp} placeholder="Last name"  value={form.last_name}  onChange={e => set('last_name',  e.target.value)} />
         </div>
 
         <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
@@ -183,13 +187,13 @@ function DetailModal({ report, onClose }) {
         )}
 
         <div style={{ background: '#f9fafb', borderRadius: 10, padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label="Reporter" value={report.reporter_name} />
-          <Field label="Email" value={report.reporter_email} />
-          <Field label="Phone" value={report.reporter_phone || '—'} />
+          <Field label="Reporter"             value={report.reporter_name} />
+          <Field label="Email"                value={report.reporter_email} />
+          <Field label="Phone"                value={report.reporter_phone || '—'} />
           {report.pet_name && <Field label="Pet Name" value={report.pet_name} />}
           <Field label="Last Seen / Found At" value={report.last_seen_location || '—'} />
-          <Field label="Description" value={report.pet_description} />
-          <Field label="Reported On" value={new Date(report.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} />
+          <Field label="Description"          value={report.pet_description} />
+          <Field label="Reported On"          value={new Date(report.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
@@ -229,13 +233,29 @@ function PetCard({ report, onClick }) {
         </div>
       </div>
       <div style={{ padding: '14px 16px' }}>
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{report.pet_name || 'Unknown'}</div>
-        {report.last_seen_location && (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>📍 {report.last_seen_location}</div>
-        )}
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-          🗓 {new Date(report.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 10 }}>{report.pet_name || 'Unknown'}</div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+          <span>🐾</span>
+          <span>{report.pet_type || 'Pet'}{report.breed ? ` • ${report.breed}` : ''}</span>
         </div>
+
+        {report.last_seen_location && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+            <span>📍</span>
+            <span>Last Seen: {report.last_seen_location}</span>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+          <span>🗓</span>
+          <span>
+            {new Date(report.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            {' • '}
+            {new Date(report.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+
         <button style={{ ...btnPrimary, width: '100%', justifyContent: 'center', background: isReunited ? '#166534' : 'var(--primary)' }}>
           {isReunited ? '🐾 View — Reunited' : 'View Details'}
         </button>
@@ -244,20 +264,20 @@ function PetCard({ report, onClick }) {
   );
 }
 
-// ─── Main Page ─────────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function LostAndFound() {
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('All');
-  const [search, setSearch] = useState('');
-  const [modal, setModal] = useState(null);
+  const [reports,    setReports]    = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [filter,     setFilter]     = useState('All');
+  const [search,     setSearch]     = useState('');
+  const [modal,      setModal]      = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
 
   const fetchReports = () => {
     setLoading(true);
     let url = '/lostfound?';
     if (filter !== 'All') url += `type=${filter}&`;
-    if (search) url += `search=${encodeURIComponent(search)}&`;
+    if (search)           url += `search=${encodeURIComponent(search)}&`;
     API.get(url)
       .then(r => setReports(r.data))
       .catch(() => setReports([]))
@@ -272,29 +292,65 @@ export default function LostAndFound() {
     setTimeout(() => setSuccessMsg(''), 6000);
   };
 
-  const activeReports = reports.filter(r => r.status !== 'Reunited');
+  const activeReports   = reports.filter(r => r.status !== 'Reunited');
   const reunitedReports = reports.filter(r => r.status === 'Reunited');
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#fff' }}>
       <Navbar />
 
       <main style={{ flex: 1 }}>
-        {/* Hero */}
-        <div style={hero}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontFamily: "'Fraunces',serif", fontWeight: 800, fontSize: 36, marginBottom: 10 }}>
-              Lost &amp; Found Pets
-            </h1>
-            <p style={{ color: 'var(--text-mid)', fontSize: 15, marginBottom: 6 }}>Help unite missing pets with their owners</p>
-            <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 24 }}>Report a lost or found pet and browse</p>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button style={btnHeroFill} onClick={() => setModal('lost')}>🤍 Report a lost pet</button>
-              <button style={btnHeroOutline} onClick={() => setModal('found')}>🤍 Report a found pet</button>
+
+        {/* ── Hero section: white page, centred green card ── */}
+        <div style={{ padding: '32px 24px', background: '#fff' }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <div style={heroCard}>
+
+              {/* Paw-prints overlay */}
+              <img
+                src={pawsBg}
+                alt=""
+                style={{
+                  position: 'absolute', top: 0, left: 0,
+                  width: '100%', height: '100%',
+                  objectFit: 'cover', opacity: 0.2,
+                  pointerEvents: 'none', borderRadius: 16,
+                }}
+              />
+
+              {/* Left: text + buttons */}
+              <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
+                <h1 style={{
+                  fontFamily: "'Fraunces',serif", fontWeight: 800,
+                  fontSize: 34, marginBottom: 8,
+                  color: '#1a2e1a',
+                }}>
+                  Lost &amp; Found Pets
+                </h1>
+                <p style={{ color: '#2d4a2d', fontSize: 15, marginBottom: 4 }}>
+                  Help unite missing pets with their owners
+                </p>
+                <p style={{ color: '#3d5c3d', fontSize: 14, marginBottom: 28 }}>
+                  Report a lost or found pet and browse
+                </p>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <button style={btnHeroFill}    onClick={() => setModal('lost')}>🤍 Report a lost pet</button>
+                  <button style={btnHeroOutline} onClick={() => setModal('found')}>🤍 Report a found pet</button>
+                </div>
+              </div>
+
+              {/* Right: corgi + cat */}
+              <div style={{
+                flexShrink: 0, display: 'flex',
+                alignItems: 'flex-end',
+                position: 'relative', zIndex: 1,
+                height: 200,
+              }}>
+                <img src={corgiImg} alt="corgi" style={{ height: 200, objectFit: 'contain', position: 'relative', zIndex: 2 }} />
+                <img src={catImg}   alt="cat"   style={{ height: 168, objectFit: 'contain', marginLeft: -24, position: 'relative', zIndex: 1 }} />
+              </div>
+
             </div>
-          </div>
-          <div style={{ flexShrink: 0 }}>
-            <img src="/corgi.png" alt="pets" style={{ height: 180, objectFit: 'contain' }} onError={e => e.target.style.display = 'none'} />
           </div>
         </div>
 
@@ -305,12 +361,17 @@ export default function LostAndFound() {
           </div>
         )}
 
-        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '28px 24px' }}>
+        {/* ── Cards section ── */}
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 40px' }}>
           <div style={{ background: 'white', borderRadius: 14, border: '1.5px solid var(--border)', padding: '20px 24px' }}>
 
             {/* Search + Filter */}
             <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)', padding: '8px 16px', flex: 1 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)',
+                padding: '8px 16px', flex: 1,
+              }}>
                 <span style={{ color: 'var(--text-muted)' }}>🔍</span>
                 <input
                   placeholder="Search by Name or breed"
@@ -322,7 +383,11 @@ export default function LostAndFound() {
               <select
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
-                style={{ border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)', padding: '8px 20px', fontFamily: 'inherit', fontSize: 14, background: 'white', cursor: 'pointer' }}
+                style={{
+                  border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)',
+                  padding: '8px 20px', fontFamily: 'inherit', fontSize: 14,
+                  background: 'white', cursor: 'pointer',
+                }}
               >
                 <option value="All">All Status</option>
                 <option value="Lost">Lost</option>
@@ -340,7 +405,6 @@ export default function LostAndFound() {
               </div>
             ) : (
               <>
-                {/* Active reports */}
                 {activeReports.length > 0 && (
                   <div style={{ marginBottom: 32 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 20 }}>
@@ -351,7 +415,6 @@ export default function LostAndFound() {
                   </div>
                 )}
 
-                {/* Reunited section */}
                 {reunitedReports.length > 0 && (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -376,7 +439,6 @@ export default function LostAndFound() {
 
       <Footer />
 
-      {/* Modals */}
       {(modal === 'lost' || modal === 'found') && (
         <ReportModal
           defaultType={modal === 'lost' ? 'Lost' : 'Found'}
@@ -398,7 +460,8 @@ const overlayStyle = {
 };
 const modalStyle = {
   background: 'white', borderRadius: 16, padding: '32px 36px',
-  width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+  width: '100%', maxHeight: '90vh', overflowY: 'auto',
+  boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
 };
 const lbl = { display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-dark)', marginBottom: 6 };
 const inp = {
@@ -417,24 +480,34 @@ const selectBtn = {
 };
 const btnOutline = {
   border: '1.5px solid var(--border)', background: 'white', color: 'var(--text-dark)',
-  borderRadius: 'var(--radius-full)', padding: '10px 24px', fontSize: 14, fontWeight: 500, cursor: 'pointer',
+  borderRadius: 'var(--radius-full)', padding: '10px 24px', fontSize: 14,
+  fontWeight: 500, cursor: 'pointer',
 };
 const btnPrimary = {
   background: 'var(--primary)', color: 'white', border: 'none',
   borderRadius: 'var(--radius-full)', padding: '10px 24px', fontSize: 14, fontWeight: 600,
   cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
 };
-const hero = {
-  background: '#f0fdf4', padding: '40px 60px', display: 'flex',
-  justifyContent: 'space-between', alignItems: 'center', gap: 24,
+const heroCard = {
+  backgroundImage: `url(${greenRect})`,
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  borderRadius: 16,
+  padding: '40px 48px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 24,
+  position: 'relative',
+  overflow: 'hidden',
 };
 const btnHeroFill = {
-  background: 'var(--primary)', color: 'white', border: 'none',
+  background: '#1a2e1a', color: 'white', border: 'none',
   borderRadius: 'var(--radius-full)', padding: '13px 24px', fontSize: 14,
   fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
 };
 const btnHeroOutline = {
-  background: 'white', color: 'var(--text-dark)', border: '1.5px solid var(--border)',
+  background: 'white', color: '#1a2e1a', border: '1.5px solid #1a2e1a',
   borderRadius: 'var(--radius-full)', padding: '13px 24px', fontSize: 14,
   fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
 };
