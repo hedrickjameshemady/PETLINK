@@ -2,70 +2,41 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
+import dogImg  from '../assets/istockphoto-1482199015-612x612 1.png';
+import blobBR  from '../assets/Group 48.png';
+import pawsImg from '../assets/Group 80.png';
+
 export default function Home() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
 
-      {/* Hero Section */}
-      <section style={styles.hero}>
-        <div style={styles.heroContent}>
-          <h1 style={styles.heroTitle}>
+      <section style={s.hero}>
+
+        {/* LEFT — text */}
+        <div style={s.left}>
+          <h1 style={s.title}>
             Find Your Forever Friend — Adopt,<br />
             Volunteer, or Donate Today
           </h1>
-          <p style={styles.heroSubtitle}>
-            Discover adoptable pets, join our volunteer family, or<br />
+          <p style={s.subtitle}>
+            Discover adoptable pets, join our volunteer family, or
             support rescues with donations.
           </p>
-          <div style={styles.heroBtns}>
-            <Link to="/adopt" className="btn btn-primary" style={{ padding: '12px 24px', fontSize: 15 }}>
-              <span>♡</span> Adopt a pet Now!
-            </Link>
-            <Link to="/donate" className="btn btn-outline" style={{ padding: '12px 24px', fontSize: 15 }}>
-              <span>♡</span> Donate
-            </Link>
+          <div style={s.btns}>
+            <Link to="/adopt" style={s.btnPrimary}>♡ Adopt a pet Now!</Link>
+            <Link to="/donate" style={s.btnOutline}>♡ Donate</Link>
           </div>
         </div>
 
-        {/* Dog image + decorative blobs */}
-        <div style={styles.heroVisual}>
-          {/* Green bottom blob */}
-          <div style={styles.blobBottomLeft} />
-          <div style={styles.blobBottomRight} />
-          <div style={styles.blobRight} />
-
-          {/* Paw prints */}
-          <div style={styles.paw1}>🐾</div>
-          <div style={styles.paw2}>🐾</div>
-
-          {/* Crown / decorative shapes */}
-          <svg style={styles.deco} width="120" height="140" viewBox="0 0 120 140" fill="none">
-            <path d="M90 10 L60 50 L30 10 L0 40 L30 80 L90 80 L120 40 Z" stroke="#2d6a4f" strokeWidth="2.5" fill="none"/>
-            <path d="M20 20 L30 5 M60 0 L60 15 M100 20 L90 5" stroke="#2d6a4f" strokeWidth="2.5" strokeLinecap="round"/>
-          </svg>
-
-          <img src="/corgi.png" alt="Adorable corgi" style={styles.dogImg}
-            onError={e => { e.target.src = 'https://placedog.net/400/450?r'; }} />
+        {/* RIGHT — paws + dog + blob all together */}
+        <div style={s.right}>
+          <img src={blobBR} alt="" style={s.blob} />
+          <img src={pawsImg} alt="" style={s.paws1} />
+          <img src={pawsImg} alt="" style={s.paws2} />
+          <img src={dogImg} alt="Corgi" style={s.dog} />
         </div>
-      </section>
 
-      {/* Features Row */}
-      <section style={styles.features}>
-        <div style={styles.featuresInner}>
-          {[
-            { icon: '🐕', title: 'Find a Pet', desc: 'Browse hundreds of animals looking for forever homes.' },
-            { icon: '🤝', title: 'Volunteer', desc: 'Give your time and make a difference in animals\' lives.' },
-            { icon: '💚', title: 'Donate', desc: 'Every peso helps feed, care, and rehome shelter animals.' },
-            { icon: '📢', title: 'Campaigns', desc: 'Join community events and awareness campaigns.' },
-          ].map(f => (
-            <div key={f.title} style={styles.featureCard}>
-              <div style={styles.featureIcon}>{f.icon}</div>
-              <h3 style={styles.featureTitle}>{f.title}</h3>
-              <p style={styles.featureDesc}>{f.desc}</p>
-            </div>
-          ))}
-        </div>
       </section>
 
       <Footer />
@@ -73,108 +44,107 @@ export default function Home() {
   );
 }
 
-const styles = {
+const s = {
   hero: {
-    position: 'relative',
+    background: '#f5f8f5',
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
-    background: '#f5f8f5',
-    minHeight: 520,
     overflow: 'hidden',
-    margin: '0',
-    padding: '48px 64px',
+    padding: '0 60px',
   },
-  heroContent: {
-    flex: 1,
-    maxWidth: 620,
+
+  /* LEFT */
+  left: {
+    flex: '0 0 48%',
     zIndex: 2,
-    position: 'relative',
+    paddingRight: 20,
   },
-  heroTitle: {
+  title: {
     fontFamily: "'Fraunces', serif",
-    fontSize: 42,
+    fontSize: 48,
     fontWeight: 700,
-    lineHeight: 1.2,
-    color: 'var(--text-dark)',
-    marginBottom: 16,
-    letterSpacing: '-0.02em',
+    lineHeight: 1.15,
+    color: '#111',
+    marginBottom: 20,
   },
-  heroSubtitle: {
+  subtitle: {
     fontSize: 16,
-    color: 'var(--text-mid)',
-    lineHeight: 1.6,
-    marginBottom: 32,
+    color: '#555',
+    lineHeight: 1.7,
+    marginBottom: 40,
+    maxWidth: 440,
   },
-  heroBtns: { display: 'flex', gap: 12, flexWrap: 'wrap' },
-  heroVisual: {
+  btns: { display: 'flex', gap: 14 },
+  btnPrimary: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '13px 26px',
+    background: '#2d6a4f',
+    color: '#fff',
+    borderRadius: 50,
+    fontSize: 15,
+    fontWeight: 600,
+    textDecoration: 'none',
+  },
+  btnOutline: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '13px 26px',
+    background: 'transparent',
+    color: '#111',
+    border: '2px solid #bbb',
+    borderRadius: 50,
+    fontSize: 15,
+    fontWeight: 600,
+    textDecoration: 'none',
+  },
+
+  /* RIGHT — all visuals together */
+  right: {
+    flex: 1,
+    position: 'relative',
+    height: 580,
+  },
+
+  /* Group 48 blob — bottom right */
+  blob: {
     position: 'absolute',
+    bottom: 0,
     right: 0,
-    bottom: 0,
-    top: 0,
-    width: '55%',
+    width: '85%',
     zIndex: 1,
+    pointerEvents: 'none',
   },
-  blobRight: {
+
+  /* Paws — near the dog, left side of the dog */
+  paws1: {
     position: 'absolute',
-    right: 0,
-    top: '20%',
-    width: '60%',
-    height: '80%',
-    background: 'var(--primary)',
-    borderRadius: '60% 0 0 60%',
-    zIndex: 0,
+    bottom: '38%',
+    left: '8%',
+    width: 80,
+    zIndex: 3,
+    pointerEvents: 'none',
   },
-  blobBottomLeft: {
+  paws2: {
     position: 'absolute',
-    left: '-2%',
+    bottom: '20%',
+    left: '2%',
+    width: 70,
+    zIndex: 3,
+    pointerEvents: 'none',
+  },
+
+  /* Dog on top of blob */
+  dog: {
+    position: 'absolute',
     bottom: 0,
-    width: 220,
-    height: 180,
-    background: 'var(--primary-dark)',
-    borderRadius: '50% 50% 0 0',
-    zIndex: 1,
-  },
-  blobBottomRight: {
-    position: 'absolute',
-    left: '30%',
-    bottom: 0,
-    width: 300,
-    height: 120,
-    background: 'var(--primary)',
-    borderRadius: '50% 50% 0 0',
-    zIndex: 1,
-  },
-  paw1: { position: 'absolute', left: '12%', top: '38%', fontSize: 40, color: '#4a9b6a', zIndex: 2, opacity: 0.7 },
-  paw2: { position: 'absolute', left: '5%', top: '55%', fontSize: 32, color: '#4a9b6a', zIndex: 2, opacity: 0.7 },
-  deco: { position: 'absolute', right: '24%', top: '5%', zIndex: 3, opacity: 0.8 },
-  dogImg: {
-    position: 'absolute',
-    right: '3%',
-    bottom: 0,
+    right: '2%',
     height: '95%',
     objectFit: 'contain',
     zIndex: 2,
+    pointerEvents: 'none',
   },
-  features: {
-    background: 'white',
-    padding: '48px 32px',
-    borderTop: '1px solid var(--border)',
-  },
-  featuresInner: {
-    maxWidth: 1100,
-    margin: '0 auto',
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: 24,
-  },
-  featureCard: {
-    textAlign: 'center',
-    padding: '28px 20px',
-    borderRadius: 'var(--radius-lg)',
-    border: '1.5px solid var(--border)',
-    transition: 'border-color 0.2s, box-shadow 0.2s',
-  },
-  featureIcon: { fontSize: 40, marginBottom: 12 },
-  featureTitle: { fontWeight: 700, fontSize: 16, marginBottom: 8, color: 'var(--text-dark)' },
-  featureDesc: { fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 },
 };

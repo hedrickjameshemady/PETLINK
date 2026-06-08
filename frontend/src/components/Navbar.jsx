@@ -2,6 +2,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useState } from 'react';
 
+import logo from '../assets/image 16.png';
+
 export default function Navbar() {
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -9,7 +11,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const links = [
-    { to: '/', label: 'Home' },
+    { to: '/home', label: 'Home' },
     { to: '/adopt', label: 'Adopt' },
     { to: '/volunteer', label: 'Volunteer' },
     { to: '/donate', label: 'Donate' },
@@ -25,13 +27,11 @@ export default function Navbar() {
 
   return (
     <nav style={styles.nav}>
-      <Link to="/" style={styles.logo}>
-        <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#e8f5e9"/>
-          <text x="20" y="26" textAnchor="middle" fontSize="18" fill="#2d6a4f">🐾</text>
-        </svg>
-        <span style={styles.logoText}>PETLINK</span>
-      </Link>
+      
+      <Link to="/home" style={styles.logo}>
+  <img src={logo} alt="PetLink" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+  <span style={styles.logoText}>PETLINK</span>
+          </Link>
 
       <ul style={styles.links}>
         {links.map(link => (

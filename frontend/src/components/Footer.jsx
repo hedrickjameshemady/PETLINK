@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import logo from '../assets/image 16.png';
+
 export default function Footer() {
   const [email, setEmail] = useState('');
 
@@ -24,11 +26,13 @@ export default function Footer() {
           <p>Careers</p>
           <p>Blogs</p>
         </div>
+
         <div style={styles.center}>
-          <div style={{ fontSize: 28, marginBottom: 4 }}>🐾</div>
-          <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 16 }}>PETLINK</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>© 2026 PETLINK. All rights reserved.</div>
-        </div>
+  <img src={logo} alt="PetLink" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', marginBottom: 6 }} />
+  <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 16 }}>PETLINK</div>
+  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>© 2024 PETLINK. All rights reserved.</div>
+</div>
+
         <div style={styles.subscribe}>
           <div style={styles.label}>Stay up to date</div>
           <p style={{ fontSize: 12, marginBottom: 10, color: 'var(--text-muted)' }}>Get the latest news and updates delivered to your inbox.</p>
@@ -59,11 +63,10 @@ const styles = {
     maxWidth: 1200,
     margin: '0 auto',
     padding: '0 32px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr',
+    alignItems: 'start',
     gap: 32,
-    flexWrap: 'wrap',
   },
   col: {
     display: 'flex',
@@ -81,6 +84,10 @@ const styles = {
   center: {
     textAlign: 'center',
     color: 'var(--text-mid)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   subscribe: { maxWidth: 280 },
   inputRow: { display: 'flex', gap: 6 },
