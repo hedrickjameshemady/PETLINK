@@ -30,10 +30,10 @@ const EMPTY_FORM = {
 };
 
 export default function Adopt() {
-  const [pets, setPets] = useState([]);
+  const [allPets, setAllPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('All Status');
+  const [status, setStatus] = useState('Available');
   const [applyPet, setApplyPet] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -41,18 +41,21 @@ export default function Adopt() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => { fetchPets(); }, [status]);
+  // Fetch ALL pets once (including adopted), filter on the frontend
+  useEffect(() => { fetchPets(); }, []);
 
   const fetchPets = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (status !== 'All Status') params.set('status', status);
-      if (search) params.set('search', search);
-      const { data } = await API.get(`/pets?${params}`);
-      setPets(data);
+      // Use /pets?status=All Status to get everything, or fetch /pets/all if admin
+      // The public endpoint excludes Adopted by default, so we pass status=Adopted separately
+      const [available, adopted] = await Promise.all([
+        API.get('/pets').catch(() => ({ data: [] })),
+        API.get('/pets?status=Adopted').catch(() => ({ data: [] })),
+      ]);
+      setAllPets([...available.data, ...adopted.data]);
     } catch {
-      setPets(DEMO_PETS);
+      setAllPets(DEMO_PETS);
     } finally {
       setLoading(false);
     }
@@ -60,8 +63,16 @@ export default function Adopt() {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    fetchPets();
   };
+
+  // Filter pets based on current status filter and search
+  const filteredPets = allPets.filter(pet => {
+    const matchesStatus = status === 'All Status' ? true : pet.status === status;
+    const matchesSearch = search.trim() === '' ? true :
+      pet.name.toLowerCase().includes(search.toLowerCase()) ||
+      (pet.breed || '').toLowerCase().includes(search.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
 
   const handleApplySubmit = async (e) => {
     e.preventDefault();
@@ -117,7 +128,7 @@ export default function Adopt() {
             </button>
           </form>
           <select value={status} onChange={e => setStatus(e.target.value)} style={styles.filterSelect}>
-            <option>All Status</option>
+            <option value="All Status">All Status</option>
             <option value="Available">Available</option>
             <option value="Pending">Pending</option>
             <option value="Adopted">Adopted</option>
@@ -133,7 +144,7 @@ export default function Adopt() {
         {/* Pet Grid */}
         {loading ? (
           <div className="loading-spinner"><div className="spinner" /></div>
-        ) : pets.length === 0 ? (
+        ) : filteredPets.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">🐾</div>
             <h3>No pets found</h3>
@@ -141,17 +152,30 @@ export default function Adopt() {
           </div>
         ) : (
           <div style={styles.grid}>
-            {pets.map((pet, i) => {
-              const photo = pet.photo || PET_PHOTOS[i % PET_PHOTOS.length];
+            {filteredPets.map((pet, i) => {
+              const photo = pet.photo ? pet.photo : PET_PHOTOS[i % PET_PHOTOS.length];
+              const isAdopted = pet.status === 'Adopted';
+              const isPending = pet.status === 'Pending';
               return (
-                <div key={pet.id} style={styles.petCard}>
-                  <div style={styles.petImgWrap}>
+                <div key={pet.id} style={{ ...styles.petCard, opacity: isAdopted ? 0.85 : 1 }}>
+                  <div style={{ ...styles.petImgWrap, position: 'relative' }}>
                     <img
                       src={photo}
                       alt={pet.name}
                       style={styles.petImg}
-                      onError={e => { e.target.src = PET_PHOTOS[i % PET_PHOTOS.length]; }}
+                      onError={e => { e.target.onerror = null; e.target.src = PET_PHOTOS[i % PET_PHOTOS.length]; }}
                     />
+                    {/* Status badge overlay */}
+                    {(isAdopted || isPending) && (
+                      <div style={{
+                        position: 'absolute', top: 10, left: 10,
+                        background: isAdopted ? '#1d4ed8' : '#d97706',
+                        color: 'white', fontSize: 11, fontWeight: 700,
+                        padding: '3px 10px', borderRadius: 20, letterSpacing: '0.04em',
+                      }}>
+                        {isAdopted ? 'ADOPTED' : 'PENDING'}
+                      </div>
+                    )}
                   </div>
                   <div style={styles.petInfo}>
                     <div style={{ marginBottom: 10 }}>
@@ -159,15 +183,35 @@ export default function Adopt() {
                       <span style={styles.petMeta}> {pet.breed} • {pet.age_years} yr{pet.age_years !== 1 ? 's' : ''} • {pet.gender}</span>
                     </div>
                     <div style={styles.petActions}>
-                      <button onClick={() => navigate(`/adopt/${pet.id}`, { state: { photo: pet.photo || PET_PHOTOS[i % PET_PHOTOS.length] } })} style={styles.btnOutline}>
+                      <button
+                        onClick={() => navigate(`/adopt/${pet.id}`, { state: { photo } })}
+                        style={styles.btnOutline}
+                      >
                         View Details
                       </button>
-                      <button onClick={() => setApplyPet({ ...pet, resolvedPhoto: pet.photo || PET_PHOTOS[i % PET_PHOTOS.length] })} style={styles.btnPrimary}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
-                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                        </svg>
-                        Apply for Adoption
-                      </button>
+                      {!isAdopted && !isPending ? (
+                        <button
+                          onClick={() => setApplyPet({ ...pet, resolvedPhoto: photo })}
+                          style={styles.btnPrimary}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                          </svg>
+                          Apply for Adoption
+                        </button>
+                      ) : (
+                        <span style={{
+                          padding: '7px 14px',
+                          borderRadius: 'var(--radius-full)',
+                          fontSize: 13, fontWeight: 600,
+                          background: isAdopted ? '#eff6ff' : '#fffbeb',
+                          color: isAdopted ? '#1d4ed8' : '#d97706',
+                          border: `1.5px solid ${isAdopted ? '#bfdbfe' : '#fde68a'}`,
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }}>
+                          {isAdopted ? '🏠 Already Adopted' : '⏳ Pending'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -177,7 +221,7 @@ export default function Adopt() {
         )}
       </main>
 
-      {/* Inline Adoption Modal */}
+      {/* Adoption Modal */}
       {applyPet && !success && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
           <div className="modal">
@@ -186,7 +230,6 @@ export default function Adopt() {
               <button className="modal-close" onClick={closeModal}>✕</button>
             </div>
             <form onSubmit={handleApplySubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
               <div className="form-group">
                 <label className="form-label">Living Situation</label>
                 <select className="form-select" value={form.living_situation} onChange={e => setForm({...form, living_situation: e.target.value})} required>
@@ -226,7 +269,6 @@ export default function Adopt() {
                 <label className="form-label">Why do you want to adopt {applyPet.name}?</label>
                 <textarea className="form-textarea" placeholder="Tell us why you'd be a great match..." value={form.reason_for_adoption} onChange={e => setForm({...form, reason_for_adoption: e.target.value})} required />
               </div>
-
               <div className="form-group">
                 <label className="form-label">Preferred Contact Method</label>
                 <select className="form-select" value={form.preferred_contact} onChange={e => setForm({...form, preferred_contact: e.target.value})}>
@@ -250,7 +292,6 @@ export default function Adopt() {
                 <label className="form-label">Address</label>
                 <input className="form-input" placeholder="Your current address" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
               </div>
-
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
@@ -282,11 +323,7 @@ const DEMO_PETS = [
   { id: 1, name: 'Kitty', type: 'Dog', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
   { id: 2, name: 'Kitty', type: 'Cat', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
   { id: 3, name: 'Kitty', type: 'Dog', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
-  { id: 4, name: 'Kitty', type: 'Cat', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
-  { id: 5, name: 'Kitty', type: 'Dog', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
-  { id: 6, name: 'Kitty', type: 'Cat', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
-  { id: 7, name: 'Kitty', type: 'Dog', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
-  { id: 8, name: 'Kitty', type: 'Cat', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
+  { id: 4, name: 'Kitty', type: 'Cat', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Adopted' },
 ];
 
 const styles = {
@@ -305,7 +342,7 @@ const styles = {
   petImg: { width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' },
   petInfo: { padding: '14px 16px 16px' },
   petMeta: { color: 'var(--text-muted)', fontSize: 13, fontWeight: 400 },
-  petActions: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+  petActions: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
   btnOutline: { padding: '7px 14px', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)', fontSize: 13, fontWeight: 500, color: 'var(--text-dark)', background: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' },
   btnPrimary: { padding: '7px 14px', border: '1.5px solid var(--primary)', borderRadius: 'var(--radius-full)', fontSize: 13, fontWeight: 500, color: 'var(--primary)', background: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' },
 };

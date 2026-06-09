@@ -10,9 +10,13 @@ export default function PetsAndAdoptions() {
   const [showAssessment, setShowAssessment] = useState(false);
   const [editPet, setEditPet] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [editPhotoFile, setEditPhotoFile] = useState(null);
+  const [editPhotoPreview, setEditPhotoPreview] = useState(null);
   const [viewApp, setViewApp] = useState(null);
   const [toast, setToast] = useState('');
-  const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '' });
+  const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [] });
+  const [petPhotoFile, setPetPhotoFile] = useState(null);
+  const [petPhotoPreview, setPetPhotoPreview] = useState(null);
   const [assessForm, setAssessForm] = useState({ pet_id: '', traits: '', description: '', compatibility_notes: '' });
 
   useEffect(() => { fetchAll(); }, []);
@@ -39,7 +43,13 @@ export default function PetsAndAdoptions() {
   const handleAddPet = async (e) => {
     e.preventDefault();
     try {
-      await API.post('/pets', petForm);
+      const formData = new FormData();
+      Object.entries(petForm).forEach(([k, v]) => {
+        if (k === 'traits') formData.append(k, JSON.stringify(v || []));
+        else if (v !== undefined && v !== null) formData.append(k, v);
+      });
+      if (petPhotoFile) formData.append('photo', petPhotoFile);
+      await API.post('/pets', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast('Pet added successfully!');
       setShowAddPet(false);
       fetchAll();
@@ -48,7 +58,9 @@ export default function PetsAndAdoptions() {
       showToast('Pet added (demo mode)!');
       setShowAddPet(false);
     }
-    setPetForm({ name: '', type: 'Dog', breed: '', age_years: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '' });
+    setPetForm({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [] });
+    setPetPhotoFile(null);
+    setPetPhotoPreview(null);
   };
 
   const handleStatus = async (appId, status) => {
@@ -74,7 +86,10 @@ export default function PetsAndAdoptions() {
   const handleEditPet = async (e) => {
     e.preventDefault();
     try {
-      await API.put(`/pets/${editPet.id}`, editForm);
+      const formData = new FormData();
+      Object.entries(editForm).forEach(([k, v]) => { if (v !== undefined && v !== null) formData.append(k, v); });
+      if (editPhotoFile) formData.append('photo', editPhotoFile);
+      await API.put(`/pets/${editPet.id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast('Pet updated successfully!');
       fetchAll();
     } catch {
@@ -82,6 +97,8 @@ export default function PetsAndAdoptions() {
       showToast('Pet updated (demo mode)!');
     }
     setEditPet(null);
+    setEditPhotoFile(null);
+    setEditPhotoPreview(null);
   };
 
   const handleDeletePet = async (pet) => {
@@ -130,11 +147,8 @@ export default function PetsAndAdoptions() {
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
 
-  // Split pets
   const activePets = pets.filter(p => p.status !== 'Adopted');
   const finishedPets = pets.filter(p => p.status === 'Adopted');
-
-  // Split applications
   const pendingApps = applications.filter(a => a.status === 'Pending Review');
   const finishedApps = applications.filter(a => a.status !== 'Pending Review');
 
@@ -142,7 +156,15 @@ export default function PetsAndAdoptions() {
     <tr key={pet.id}>
       <td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={styles.petAvatar}>🐾</div>
+          {pet.photo ? (
+            <img
+              src={`http://localhost:5000${pet.photo}`}
+              alt={pet.name}
+              style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1.5px solid var(--border)' }}
+            />
+          ) : (
+            <div style={styles.petAvatar}>🐾</div>
+          )}
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{pet.name}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ID: {pet.pet_id}</div>
@@ -156,7 +178,7 @@ export default function PetsAndAdoptions() {
       <td>{statusBadge(pet.status)}</td>
       <td>
         <div style={{ display: 'flex', gap: 12 }}>
-          <button style={styles.linkBtn} onClick={() => { setEditPet(pet); setEditForm({ name: pet.name, type: pet.type, breed: pet.breed, age_years: pet.age_years, gender: pet.gender, health_status: pet.health_status, status: pet.status, description: pet.description || '' }); }}>Edit</button>
+          <button style={styles.linkBtn}onClick={() => { setEditPet(pet); setEditForm({ name: pet.name, type: pet.type, breed: pet.breed, age_years: pet.age_years, gender: pet.gender, health_status: pet.health_status, status: pet.status, description: pet.description || '' }); setEditPhotoFile(null); setEditPhotoPreview(null); }}>Edit</button>
           <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleDeletePet(pet)}>Delete</button>
         </div>
       </td>
@@ -205,14 +227,10 @@ export default function PetsAndAdoptions() {
             <button className="btn btn-primary btn-sm" onClick={() => setShowAddPet(true)}>+ Add New Pet</button>
           </div>
         </div>
-
-        {/* Active Pets */}
         <div style={styles.subLabel}>Active Pets</div>
         <div style={styles.scrollTable}>
           <table>
-            <thead>
-              <tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>HEALTH</th><th>STATUS</th><th></th></tr>
-            </thead>
+            <thead><tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>HEALTH</th><th>STATUS</th><th></th></tr></thead>
             <tbody>
               {activePets.length === 0
                 ? <tr><td colSpan={7} style={styles.emptyCell}>No active pets.</td></tr>
@@ -220,14 +238,10 @@ export default function PetsAndAdoptions() {
             </tbody>
           </table>
         </div>
-
-        {/* Adopted Pets */}
         <div style={{ ...styles.subLabel, marginTop: 24 }}>Adopted Pets</div>
         <div style={styles.scrollTable}>
           <table>
-            <thead>
-              <tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>HEALTH</th><th>STATUS</th><th></th></tr>
-            </thead>
+            <thead><tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>HEALTH</th><th>STATUS</th><th></th></tr></thead>
             <tbody>
               {finishedPets.length === 0
                 ? <tr><td colSpan={7} style={styles.emptyCell}>No adopted pets yet.</td></tr>
@@ -243,14 +257,10 @@ export default function PetsAndAdoptions() {
           <h2 style={styles.sectionTitle}>Adoption Applications</h2>
           <button className="btn btn-outline btn-sm">▾ Filter</button>
         </div>
-
-        {/* Pending Applications */}
         <div style={styles.subLabel}>Pending Applications</div>
         <div style={styles.scrollTable}>
           <table>
-            <thead>
-              <tr><th>APPLICANT</th><th>PET</th><th>APPLIED DATE</th><th>STATUS</th><th></th></tr>
-            </thead>
+            <thead><tr><th>APPLICANT</th><th>PET</th><th>APPLIED DATE</th><th>STATUS</th><th></th></tr></thead>
             <tbody>
               {pendingApps.length === 0
                 ? <tr><td colSpan={5} style={styles.emptyCell}>No pending applications.</td></tr>
@@ -258,14 +268,10 @@ export default function PetsAndAdoptions() {
             </tbody>
           </table>
         </div>
-
-        {/* Finished Applications */}
         <div style={{ ...styles.subLabel, marginTop: 24 }}>Finished Applications</div>
         <div style={styles.scrollTable}>
           <table>
-            <thead>
-              <tr><th>APPLICANT</th><th>PET</th><th>APPLIED DATE</th><th>STATUS</th><th></th></tr>
-            </thead>
+            <thead><tr><th>APPLICANT</th><th>PET</th><th>APPLIED DATE</th><th>STATUS</th><th></th></tr></thead>
             <tbody>
               {finishedApps.length === 0
                 ? <tr><td colSpan={5} style={styles.emptyCell}>No finished applications yet.</td></tr>
@@ -321,62 +327,160 @@ export default function PetsAndAdoptions() {
       {/* ─── ADD PET MODAL ─── */}
       {showAddPet && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddPet(false)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 className="modal-title">Add New Pet</h2>
-              <button className="modal-close" onClick={() => setShowAddPet(false)}>✕</button>
+          <div className="modal" style={{ maxWidth: 560, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+
+            {/* Close button */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+              <button onClick={() => setShowAddPet(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>✕</button>
             </div>
-            <form onSubmit={handleAddPet} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Photo upload zone */}
+            <div
+              onClick={() => document.getElementById('petPhotoInput').click()}
+              style={{
+                border: '2px dashed #c7d2db', borderRadius: 12, padding: '28px 16px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', marginBottom: 24, minHeight: 160,
+                background: petPhotoPreview ? 'transparent' : '#fafafa',
+                overflow: 'hidden', position: 'relative',
+              }}
+            >
+              {petPhotoPreview ? (
+                <img src={petPhotoPreview} alt="preview" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 8 }} />
+              ) : (
+                <>
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 10 }}>
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                    <circle cx="19.5" cy="8.5" r="1.2" fill="#555" stroke="none"/>
+                    <line x1="12" y1="6" x2="15" y2="6" stroke="#555" strokeWidth="1.5"/>
+                    <text x="13.5" y="6.6" fontSize="3" fill="#555" stroke="none">+</text>
+                  </svg>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, color: '#222' }}>Add Pet Photo</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Click to upload</div>
+                </>
+              )}
+            </div>
+            <input
+              id="petPhotoInput"
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files[0];
+                if (file) {
+                  setPetPhotoFile(file);
+                  setPetPhotoPreview(URL.createObjectURL(file));
+                }
+              }}
+            />
+
+            <form onSubmit={handleAddPet} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Pet Name + Species */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label">Pet Name *</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Pet Name</label>
                   <input className="form-input" value={petForm.name} onChange={e => setPetForm({ ...petForm, name: e.target.value })} required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Type *</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Species</label>
                   <select className="form-select" value={petForm.type} onChange={e => setPetForm({ ...petForm, type: e.target.value })}>
                     {['Dog','Cat','Bird','Rabbit','Other'].map(t => <option key={t}>{t}</option>)}
                   </select>
                 </div>
+              </div>
+
+              {/* Breed */}
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 700 }}>Breed</label>
+                <input className="form-input" value={petForm.breed} onChange={e => setPetForm({ ...petForm, breed: e.target.value })} />
+              </div>
+
+              {/* Age + Weight + Gender */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label">Breed</label>
-                  <input className="form-input" value={petForm.breed} onChange={e => setPetForm({ ...petForm, breed: e.target.value })} />
+                  <label className="form-label" style={{ fontWeight: 700 }}>Age</label>
+                  <input className="form-input" type="number" min="0" placeholder="yrs" value={petForm.age_years} onChange={e => setPetForm({ ...petForm, age_years: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Age (years)</label>
-                  <input className="form-input" type="number" min="0" value={petForm.age_years} onChange={e => setPetForm({ ...petForm, age_years: e.target.value })} />
+                  <label className="form-label" style={{ fontWeight: 700 }}>Weight</label>
+                  <input className="form-input" type="number" min="0" placeholder="kg" value={petForm.weight} onChange={e => setPetForm({ ...petForm, weight: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Gender</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Gender</label>
                   <select className="form-select" value={petForm.gender} onChange={e => setPetForm({ ...petForm, gender: e.target.value })}>
                     <option>Male</option><option>Female</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Personality Traits */}
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 700 }}>Personality Traits</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                  {['Playful','Friendly','Calm','Energetic','Sweet','Aloof','Hyperattached','Unloving'].map(trait => {
+                    const selected = (petForm.traits || []).includes(trait);
+                    return (
+                      <button
+                        key={trait}
+                        type="button"
+                        onClick={() => {
+                          const current = petForm.traits || [];
+                          setPetForm({ ...petForm, traits: selected ? current.filter(t => t !== trait) : [...current, trait] });
+                        }}
+                        style={{
+                          padding: '7px 18px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
+                          border: selected ? '1.5px solid var(--primary)' : '1.5px solid #d1d5db',
+                          background: selected ? '#f0fdf4' : '#fff5f5',
+                          color: selected ? 'var(--primary)' : '#555',
+                          fontWeight: selected ? 600 : 400,
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {trait}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Health Status + Status + Intake Date */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label">Health Status</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Health Status</label>
                   <select className="form-select" value={petForm.health_status} onChange={e => setPetForm({ ...petForm, health_status: e.target.value })}>
                     {['Excellent','Good','Fair','Poor'].map(h => <option key={h}>{h}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Status</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Status</label>
                   <select className="form-select" value={petForm.status} onChange={e => setPetForm({ ...petForm, status: e.target.value })}>
                     {['Available','Not Available'].map(s => <option key={s}>{s}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Intake Date</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Intake Date</label>
                   <input className="form-input" type="date" value={petForm.intake_date} onChange={e => setPetForm({ ...petForm, intake_date: e.target.value })} />
                 </div>
               </div>
+
+              {/* Additional Information */}
               <div className="form-group">
-                <label className="form-label">Description</label>
-                <textarea className="form-textarea" value={petForm.description} onChange={e => setPetForm({ ...petForm, description: e.target.value })} />
+                <label className="form-label" style={{ fontWeight: 700 }}>Additional Information</label>
+                <textarea
+                  className="form-textarea"
+                  placeholder="Tells us more about its information"
+                  value={petForm.description}
+                  onChange={e => setPetForm({ ...petForm, description: e.target.value })}
+                  style={{ background: '#f0fdf4', minHeight: 90 }}
+                />
               </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" onClick={() => setShowAddPet(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Add Pet</button>
+
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4, marginBottom: 4 }}>
+                <button type="submit" className="btn btn-primary" style={{ minWidth: 120, margin: 0 }}>Add</button>
               </div>
+              
             </form>
           </div>
         </div>
@@ -414,15 +518,62 @@ export default function PetsAndAdoptions() {
           </div>
         </div>
       )}
-
-      {/* ─── EDIT PET MODAL ─── */}
+{/* ─── EDIT PET MODAL ─── */}
       {editPet && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditPet(null)}>
-          <div className="modal">
+          <div className="modal" style={{ maxWidth: 560, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
               <h2 className="modal-title">Edit Pet — {editPet.name}</h2>
-              <button className="modal-close" onClick={() => setEditPet(null)}>✕</button>
+              <button className="modal-close" onClick={() => { setEditPet(null); setEditPhotoFile(null); setEditPhotoPreview(null); }}>✕</button>
             </div>
+
+            {/* Photo section */}
+            <div
+              onClick={() => document.getElementById('editPhotoInput').click()}
+              style={{
+                border: '2px dashed #c7d2db', borderRadius: 12, overflow: 'hidden',
+                marginBottom: 20, cursor: 'pointer', position: 'relative',
+                minHeight: 160, background: '#fafafa',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {editPhotoPreview || editPet.photo ? (
+                <>
+                  <img
+                    src={editPhotoPreview || editPet.photo}
+                    alt={editPet.name}
+                    style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }}
+                  />
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0,
+                    background: 'rgba(0,0,0,0.45)', color: 'white',
+                    textAlign: 'center', fontSize: 12, fontWeight: 600, padding: '6px 0',
+                  }}>
+                    Click to change photo
+                  </div>
+                </>
+              ) : (
+                <>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#444', marginBottom: 4 }}>Add Pet Photo</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Click to upload</div>
+                </>
+              )}
+            </div>
+            <input
+              id="editPhotoInput"
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files[0];
+                if (file) { setEditPhotoFile(file); setEditPhotoPreview(URL.createObjectURL(file)); }
+              }}
+            />
+
             <form onSubmit={handleEditPet} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="form-group">
@@ -467,7 +618,7 @@ export default function PetsAndAdoptions() {
                 <textarea className="form-textarea" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" onClick={() => setEditPet(null)}>Cancel</button>
+                <button type="button" className="btn btn-outline" onClick={() => { setEditPet(null); setEditPhotoFile(null); setEditPhotoPreview(null); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save Changes</button>
               </div>
             </form>

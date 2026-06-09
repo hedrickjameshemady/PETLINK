@@ -122,9 +122,40 @@ export default function UserDashboard() {
                   {applications.map(app => (
                     <tr key={app.id}>
                       <td>
-                        <div style={{ fontWeight: 600 }}>{app.pet_name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{app.pet_breed} • {app.pet_type}</div>
-                      </td>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    {app.pet_photo ? (
+      <img
+        src={app.pet_photo}
+        alt={app.pet_name}
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 8,
+          objectFit: 'cover',
+          border: '1.5px solid var(--border)',
+          flexShrink: 0,
+        }}
+      />
+    ) : (
+      <div style={{
+        width: 44,
+        height: 44,
+        borderRadius: 8,
+        background: 'var(--green-50)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 22,
+        flexShrink: 0,
+        border: '1.5px solid var(--border)',
+      }}>🐾</div>
+    )}
+    <div>
+      <div style={{ fontWeight: 600 }}>{app.pet_name}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{app.pet_breed} • {app.pet_type}</div>
+    </div>
+  </div>
+</td>
                       <td>{new Date(app.applied_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
                       <td>{StatusBadge(app.status)}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 240 }}>{app.review_notes || '—'}</td>

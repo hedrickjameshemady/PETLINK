@@ -4,6 +4,20 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
 
+const EMPTY_FORM = {
+  living_situation: '',
+  has_yard: false,
+  other_pets: '',
+  children_at_home: '',
+  experience_with_pets: '',
+  reason_for_adoption: '',
+  preferred_contact: 'Email',
+  full_name: '',
+  email: '',
+  phone: '',
+  address: '',
+};
+
 export default function PetDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -14,7 +28,7 @@ export default function PetDetail() {
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [form, setForm] = useState({ living_situation: '', has_yard: false, other_pets: '', children_at_home: '', experience_with_pets: '', reason_for_adoption: '', preferred_contact: 'Email' });
+  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
     fetchPet();
@@ -42,10 +56,16 @@ export default function PetDetail() {
     } finally { setSubmitting(false); }
   };
 
+  const closeModal = () => {
+    setShowForm(false);
+    setForm(EMPTY_FORM);
+  };
+
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
   if (!pet) return <div>Pet not found</div>;
 
-  const img = location.state?.photo || 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=500&h=400&fit=crop';
+  const fallback = 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=500&h=400&fit=crop';
+  const img = pet.photo || location.state?.photo || fallback;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -55,8 +75,12 @@ export default function PetDetail() {
 
         <div style={styles.petLayout}>
           <div style={styles.imgSide}>
-            <img src={pet.photo || img} alt={pet.name} style={styles.petImg}
-              onError={e => { e.target.src = img; }} />
+            <img
+              src={img}
+              alt={pet.name}
+              style={styles.petImg}
+              onError={e => { e.target.onerror = null; e.target.src = fallback; }}
+            />
           </div>
           <div style={styles.infoSide}>
             <h1 style={styles.name}>{pet.name}</h1>
@@ -104,14 +128,16 @@ export default function PetDetail() {
           </div>
         </div>
 
+        {/* Adoption Modal — matches Adopt.jsx exactly */}
         {showForm && !success && (
-          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
             <div className="modal">
               <div className="modal-header">
                 <h2 className="modal-title">Adoption Application — {pet.name}</h2>
-                <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
+                <button className="modal-close" onClick={closeModal}>✕</button>
               </div>
               <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
                 <div className="form-group">
                   <label className="form-label">Living Situation</label>
                   <select className="form-select" value={form.living_situation} onChange={e => setForm({...form, living_situation: e.target.value})} required>
@@ -122,6 +148,7 @@ export default function PetDetail() {
                     <option>Condo</option>
                   </select>
                 </div>
+
                 <div className="form-group">
                   <label className="form-label">Do you have a yard?</label>
                   <select className="form-select" value={form.has_yard} onChange={e => setForm({...form, has_yard: e.target.value === 'true'})}>
@@ -129,10 +156,12 @@ export default function PetDetail() {
                     <option value="true">Yes</option>
                   </select>
                 </div>
+
                 <div className="form-group">
                   <label className="form-label">Other pets at home</label>
                   <input className="form-input" placeholder="E.g. 1 dog, 2 cats or None" value={form.other_pets} onChange={e => setForm({...form, other_pets: e.target.value})} />
                 </div>
+
                 <div className="form-group">
                   <label className="form-label">Children at home</label>
                   <select className="form-select" value={form.children_at_home} onChange={e => setForm({...form, children_at_home: e.target.value})}>
@@ -143,16 +172,47 @@ export default function PetDetail() {
                     <option>Teens (11-17)</option>
                   </select>
                 </div>
+
                 <div className="form-group">
                   <label className="form-label">Experience with pets</label>
                   <textarea className="form-textarea" placeholder="Describe your experience..." value={form.experience_with_pets} onChange={e => setForm({...form, experience_with_pets: e.target.value})} />
                 </div>
+
                 <div className="form-group">
                   <label className="form-label">Why do you want to adopt {pet.name}?</label>
                   <textarea className="form-textarea" placeholder="Tell us why you'd be a great match..." value={form.reason_for_adoption} onChange={e => setForm({...form, reason_for_adoption: e.target.value})} required />
                 </div>
+
+                <div className="form-group">
+                  <label className="form-label">Preferred Contact Method</label>
+                  <select className="form-select" value={form.preferred_contact} onChange={e => setForm({...form, preferred_contact: e.target.value})}>
+                    <option>Email</option>
+                    <option>Phone</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Full Name</label>
+                  <input className="form-input" placeholder="Your full name" value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Email Address</label>
+                  <input className="form-input" type="email" placeholder="your@email.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Phone Number</label>
+                  <input className="form-input" type="tel" placeholder="e.g. 09171234567" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Address</label>
+                  <input className="form-input" placeholder="Your current address" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+                </div>
+
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
-                  <button type="button" className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button>
+                  <button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button>
                   <button type="submit" className="btn btn-primary" disabled={submitting}>
                     {submitting ? 'Submitting...' : 'Submit Application'}
                   </button>

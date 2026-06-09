@@ -1,8 +1,21 @@
 const express = require('express');
 const db = require('../config/db');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
+
+const uploadDir = path.join(__dirname, '../uploads/pets');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, `pet_${Date.now()}${path.extname(file.originalname)}`),
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+
 
 // Get all pets (public)
 router.get('/', async (req, res) => {
@@ -64,30 +77,36 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create pet (admin/staff)
-router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
   try {
     const { name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date } = req.body;
+    const photoUrl = req.file ? `/uploads/pets/${req.file.filename}` : null;
 
     const count = await db.query('SELECT COUNT(*) as cnt FROM pets');
     const petId = `PET${String(count[0][0].cnt + 1).padStart(3, '0')}`;
 
     const [result] = await db.query(
-      `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [petId, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status || 'Available', description, intake_date, req.user.id]
+      `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by, photo)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [petId, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status || 'Available', description, intake_date, req.user.id, photoUrl]
     );
     res.status(201).json({ id: result.insertId, pet_id: petId, message: 'Pet added successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Update pet
-router.put('/:id', authMiddleware, adminMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
   try {
     const { name, type, breed, age_years, gender, health_status, status, description } = req.body;
-    await db.query(
-      'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, health_status=?, status=?, description=? WHERE id=?',
-      [name, type, breed, age_years, gender, health_status, status, description, req.params.id]
-    );
+    const fields = [name, type, breed, age_years, gender, health_status, status, description];
+    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, health_status=?, status=?, description=?';
+    if (req.file) {
+      query += ', photo=?';
+      fields.push(`/uploads/pets/${req.file.filename}`);
+    }
+    query += ' WHERE id=?';
+    fields.push(req.params.id);
+    await db.query(query, fields);
     res.json({ message: 'Pet updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
