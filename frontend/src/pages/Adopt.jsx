@@ -15,13 +15,27 @@ const PET_PHOTOS = [
   'https://images.unsplash.com/photo-1592754862816-1a21a4ea2281?w=400&h=400&fit=crop',
 ];
 
+const EMPTY_FORM = {
+  living_situation: '',
+  has_yard: false,
+  other_pets: '',
+  children_at_home: '',
+  experience_with_pets: '',
+  reason_for_adoption: '',
+  preferred_contact: 'Email',
+  full_name: '',
+  email: '',
+  phone: '',
+  address: '',
+};
+
 export default function Adopt() {
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All Status');
-  const [applyPet, setApplyPet] = useState(null); // the pet to apply for
-  const [form, setForm] = useState({ living_situation: '', has_yard: false, other_pets: '', children_at_home: '', experience_with_pets: '', reason_for_adoption: '', preferred_contact: 'Email' });
+  const [applyPet, setApplyPet] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const { user } = useAuth();
@@ -66,7 +80,7 @@ export default function Adopt() {
   const closeModal = () => {
     setApplyPet(null);
     setSuccess(false);
-    setForm({ living_situation: '', has_yard: false, other_pets: '', children_at_home: '', experience_with_pets: '', reason_for_adoption: '', preferred_contact: 'Email' });
+    setForm(EMPTY_FORM);
   };
 
   return (
@@ -146,14 +160,14 @@ export default function Adopt() {
                     </div>
                     <div style={styles.petActions}>
                       <button onClick={() => navigate(`/adopt/${pet.id}`, { state: { photo: pet.photo || PET_PHOTOS[i % PET_PHOTOS.length] } })} style={styles.btnOutline}>
-                            View Details
+                        View Details
                       </button>
-      <button onClick={() => setApplyPet({ ...pet, resolvedPhoto: pet.photo || PET_PHOTOS[i % PET_PHOTOS.length] })} style={styles.btnPrimary}>
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
-    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-  </svg>
-  Apply for Adoption
-</button>
+                      <button onClick={() => setApplyPet({ ...pet, resolvedPhoto: pet.photo || PET_PHOTOS[i % PET_PHOTOS.length] })} style={styles.btnPrimary}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                        </svg>
+                        Apply for Adoption
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -172,6 +186,7 @@ export default function Adopt() {
               <button className="modal-close" onClick={closeModal}>✕</button>
             </div>
             <form onSubmit={handleApplySubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
               <div className="form-group">
                 <label className="form-label">Living Situation</label>
                 <select className="form-select" value={form.living_situation} onChange={e => setForm({...form, living_situation: e.target.value})} required>
@@ -211,6 +226,31 @@ export default function Adopt() {
                 <label className="form-label">Why do you want to adopt {applyPet.name}?</label>
                 <textarea className="form-textarea" placeholder="Tell us why you'd be a great match..." value={form.reason_for_adoption} onChange={e => setForm({...form, reason_for_adoption: e.target.value})} required />
               </div>
+
+              <div className="form-group">
+                <label className="form-label">Preferred Contact Method</label>
+                <select className="form-select" value={form.preferred_contact} onChange={e => setForm({...form, preferred_contact: e.target.value})}>
+                  <option>Email</option>
+                  <option>Phone</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input className="form-input" placeholder="Your full name" value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email Address</label>
+                <input className="form-input" type="email" placeholder="your@email.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phone Number</label>
+                <input className="form-input" type="tel" placeholder="e.g. 09171234567" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Address</label>
+                <input className="form-input" placeholder="Your current address" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+              </div>
+
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ export default function PetDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [pet, setPet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -44,7 +45,7 @@ export default function PetDetail() {
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
   if (!pet) return <div>Pet not found</div>;
 
-  const img = `https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=500&h=400&fit=crop`;
+  const img = location.state?.photo || 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=500&h=400&fit=crop';
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -103,7 +104,6 @@ export default function PetDetail() {
           </div>
         </div>
 
-        {/* Adoption Form Modal */}
         {showForm && !success && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
             <div className="modal">

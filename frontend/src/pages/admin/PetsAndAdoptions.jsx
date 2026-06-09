@@ -59,6 +59,18 @@ export default function PetsAndAdoptions() {
     showToast(`Application ${status}`);
   };
 
+  const handleDeleteApp = async (appId) => {
+    if (!window.confirm('Delete this application? This cannot be undone.')) return;
+    try {
+      await API.delete(`/adoptions/${appId}`);
+      showToast('Application deleted.');
+      fetchAll();
+    } catch {
+      setApplications(prev => prev.filter(a => a.id !== appId));
+      showToast('Application deleted (demo mode).');
+    }
+  };
+
   const handleEditPet = async (e) => {
     e.preventDefault();
     try {
@@ -112,11 +124,73 @@ export default function PetsAndAdoptions() {
   };
 
   const statusBadge = (s) => {
-    const map = { 'Available': 'green', 'Adopted': 'blue', 'Pending': 'yellow', 'Not Available': 'gray', 'Approved': 'green', 'Pending Review': 'yellow', 'Rejected': 'red', 'Excellent': 'green', 'Good': 'blue', 'Fair': 'yellow', 'Poor': 'red', 'Active': 'green', 'Inactive': 'gray' };
+    const map = { 'Available': 'green', 'Adopted': 'blue', 'Pending': 'yellow', 'Not Available': 'gray', 'Approved': 'green', 'Pending Review': 'yellow', 'Rejected': 'red', 'Cancelled': 'gray', 'Excellent': 'green', 'Good': 'blue', 'Fair': 'yellow', 'Poor': 'red' };
     return <span className={`badge badge-${map[s] || 'gray'}`}>{s}</span>;
   };
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
+
+  // Split pets
+  const activePets = pets.filter(p => p.status !== 'Adopted');
+  const finishedPets = pets.filter(p => p.status === 'Adopted');
+
+  // Split applications
+  const pendingApps = applications.filter(a => a.status === 'Pending Review');
+  const finishedApps = applications.filter(a => a.status !== 'Pending Review');
+
+  const petRow = (pet) => (
+    <tr key={pet.id}>
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={styles.petAvatar}>🐾</div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{pet.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ID: {pet.pet_id}</div>
+          </div>
+        </div>
+      </td>
+      <td>{pet.type}</td>
+      <td>{pet.breed}</td>
+      <td>{pet.age_years} year{pet.age_years !== 1 ? 's' : ''} old</td>
+      <td>{statusBadge(pet.health_status)}</td>
+      <td>{statusBadge(pet.status)}</td>
+      <td>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button style={styles.linkBtn} onClick={() => { setEditPet(pet); setEditForm({ name: pet.name, type: pet.type, breed: pet.breed, age_years: pet.age_years, gender: pet.gender, health_status: pet.health_status, status: pet.status, description: pet.description || '' }); }}>Edit</button>
+          <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleDeletePet(pet)}>Delete</button>
+        </div>
+      </td>
+    </tr>
+  );
+
+  const appRow = (app) => (
+    <tr key={app.id}>
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={styles.avatarCircle}>{(app.full_name || app.applicant_name || app.name || 'U')[0]}</div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{app.full_name || app.applicant_name || app.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--primary)' }}>{app.email || app.applicant_email}</div>
+          </div>
+        </div>
+      </td>
+      <td style={{ fontWeight: 500 }}>{app.pet_name} ({app.pet_breed})</td>
+      <td>{new Date(app.applied_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+      <td>{statusBadge(app.status)}</td>
+      <td>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button style={styles.linkBtn} onClick={() => setViewApp(app)}>View</button>
+          {app.status === 'Pending Review' && (
+            <>
+              <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleStatus(app.id, 'Rejected')}>Reject</button>
+              <button style={{ ...styles.linkBtn, color: '#198754' }} onClick={() => handleStatus(app.id, 'Approved')}>Approve</button>
+            </>
+          )}
+          <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleDeleteApp(app.id)}>Delete</button>
+        </div>
+      </td>
+    </tr>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -131,36 +205,33 @@ export default function PetsAndAdoptions() {
             <button className="btn btn-primary btn-sm" onClick={() => setShowAddPet(true)}>+ Add New Pet</button>
           </div>
         </div>
-        <div className="table-wrap">
+
+        {/* Active Pets */}
+        <div style={styles.subLabel}>Active Pets</div>
+        <div style={styles.scrollTable}>
           <table>
             <thead>
               <tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>HEALTH</th><th>STATUS</th><th></th></tr>
             </thead>
             <tbody>
-              {pets.map(pet => (
-                <tr key={pet.id}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={styles.petAvatar}>🐾</div>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{pet.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ID: {pet.pet_id}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>{pet.type}</td>
-                  <td>{pet.breed}</td>
-                  <td>{pet.age_years} year{pet.age_years !== 1 ? 's' : ''} old</td>
-                  <td>{statusBadge(pet.health_status)}</td>
-                  <td>{statusBadge(pet.status)}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <button style={styles.linkBtn} onClick={() => { setEditPet(pet); setEditForm({ name: pet.name, type: pet.type, breed: pet.breed, age_years: pet.age_years, gender: pet.gender, health_status: pet.health_status, status: pet.status, description: pet.description || '' }); }}>Edit</button>
-                      <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleDeletePet(pet)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {activePets.length === 0
+                ? <tr><td colSpan={7} style={styles.emptyCell}>No active pets.</td></tr>
+                : activePets.map(petRow)}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Adopted Pets */}
+        <div style={{ ...styles.subLabel, marginTop: 24 }}>Adopted Pets</div>
+        <div style={styles.scrollTable}>
+          <table>
+            <thead>
+              <tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>HEALTH</th><th>STATUS</th><th></th></tr>
+            </thead>
+            <tbody>
+              {finishedPets.length === 0
+                ? <tr><td colSpan={7} style={styles.emptyCell}>No adopted pets yet.</td></tr>
+                : finishedPets.map(petRow)}
             </tbody>
           </table>
         </div>
@@ -172,35 +243,33 @@ export default function PetsAndAdoptions() {
           <h2 style={styles.sectionTitle}>Adoption Applications</h2>
           <button className="btn btn-outline btn-sm">▾ Filter</button>
         </div>
-        <div className="table-wrap">
+
+        {/* Pending Applications */}
+        <div style={styles.subLabel}>Pending Applications</div>
+        <div style={styles.scrollTable}>
           <table>
             <thead>
               <tr><th>APPLICANT</th><th>PET</th><th>APPLIED DATE</th><th>STATUS</th><th></th></tr>
             </thead>
             <tbody>
-              {applications.map(app => (
-                <tr key={app.id}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={styles.avatarCircle}>{(app.applicant_name || app.name || 'U')[0]}</div>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{app.applicant_name || app.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--primary)' }}>{app.applicant_email || app.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ fontWeight: 500 }}>{app.pet_name} ({app.pet_breed})</td>
-                  <td>{new Date(app.applied_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
-                  <td>{statusBadge(app.status)}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <button style={styles.linkBtn} onClick={() => setViewApp(app)}>View</button>
-                      <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleStatus(app.id, 'Rejected')}>Reject</button>
-                      <button style={{ ...styles.linkBtn, color: '#198754' }} onClick={() => handleStatus(app.id, 'Approved')}>Approve</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {pendingApps.length === 0
+                ? <tr><td colSpan={5} style={styles.emptyCell}>No pending applications.</td></tr>
+                : pendingApps.map(appRow)}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Finished Applications */}
+        <div style={{ ...styles.subLabel, marginTop: 24 }}>Finished Applications</div>
+        <div style={styles.scrollTable}>
+          <table>
+            <thead>
+              <tr><th>APPLICANT</th><th>PET</th><th>APPLIED DATE</th><th>STATUS</th><th></th></tr>
+            </thead>
+            <tbody>
+              {finishedApps.length === 0
+                ? <tr><td colSpan={5} style={styles.emptyCell}>No finished applications yet.</td></tr>
+                : finishedApps.map(appRow)}
             </tbody>
           </table>
         </div>
@@ -322,8 +391,11 @@ export default function PetsAndAdoptions() {
               <button className="modal-close" onClick={() => setViewApp(null)}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
-              <div style={styles.detailRow}><span style={styles.detailLbl}>Applicant</span><span>{viewApp.applicant_name || viewApp.name}</span></div>
-              <div style={styles.detailRow}><span style={styles.detailLbl}>Email</span><span>{viewApp.applicant_email || viewApp.email}</span></div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Applicant</span><span>{viewApp.full_name || viewApp.applicant_name || viewApp.name}</span></div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Email</span><span>{viewApp.email || viewApp.applicant_email}</span></div>
+              {viewApp.phone && <div style={styles.detailRow}><span style={styles.detailLbl}>Phone</span><span>{viewApp.phone}</span></div>}
+              {viewApp.address && <div style={styles.detailRow}><span style={styles.detailLbl}>Address</span><span>{viewApp.address}</span></div>}
+              {viewApp.preferred_contact && <div style={styles.detailRow}><span style={styles.detailLbl}>Preferred Contact</span><span>{viewApp.preferred_contact}</span></div>}
               <div style={styles.detailRow}><span style={styles.detailLbl}>Pet</span><span>{viewApp.pet_name} ({viewApp.pet_breed})</span></div>
               <div style={styles.detailRow}><span style={styles.detailLbl}>Applied</span><span>{new Date(viewApp.applied_at).toLocaleDateString()}</span></div>
               <div style={styles.detailRow}><span style={styles.detailLbl}>Status</span>{statusBadge(viewApp.status)}</div>
@@ -331,8 +403,13 @@ export default function PetsAndAdoptions() {
               {viewApp.reason_for_adoption && <div style={styles.detailRow}><span style={styles.detailLbl}>Reason</span><span>{viewApp.reason_for_adoption}</span></div>}
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
-              <button className="btn btn-danger btn-sm" onClick={() => { handleStatus(viewApp.id, 'Rejected'); setViewApp(null); }}>Reject</button>
-              <button className="btn btn-success btn-sm" onClick={() => { handleStatus(viewApp.id, 'Approved'); setViewApp(null); }}>Approve</button>
+              {viewApp.status === 'Pending Review' && (
+                <>
+                  <button className="btn btn-danger btn-sm" onClick={() => { handleStatus(viewApp.id, 'Rejected'); setViewApp(null); }}>Reject</button>
+                  <button className="btn btn-success btn-sm" onClick={() => { handleStatus(viewApp.id, 'Approved'); setViewApp(null); }}>Approve</button>
+                </>
+              )}
+              <button className="btn btn-outline btn-sm" onClick={() => setViewApp(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -441,7 +518,7 @@ export default function PetsAndAdoptions() {
 const DEMO_PETS = [
   { id: 1, pet_id: 'PET001', name: 'Hedrick', type: 'Dog', breed: 'Poodle', age_years: 1, gender: 'Male', health_status: 'Excellent', status: 'Available' },
   { id: 2, pet_id: 'PET002', name: 'Golden', type: 'Dog', breed: 'Dalmatian', age_years: 1, gender: 'Male', health_status: 'Excellent', status: 'Available' },
-  { id: 3, pet_id: 'PET003', name: 'Sia', type: 'Cat', breed: 'Siamese', age_years: 1, gender: 'Female', health_status: 'Excellent', status: 'Available' },
+  { id: 3, pet_id: 'PET003', name: 'Sia', type: 'Cat', breed: 'Siamese', age_years: 1, gender: 'Female', health_status: 'Excellent', status: 'Adopted' },
 ];
 
 const DEMO_APPS = [
@@ -458,6 +535,9 @@ const DEMO_ASSESSMENTS = [
 const styles = {
   tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontWeight: 700, fontSize: 16 },
+  subLabel: { fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 },
+  scrollTable: { overflowY: 'auto', maxHeight: 260, borderRadius: 8, border: '1px solid var(--border)' },
+  emptyCell: { textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, padding: '16px 0' },
   petAvatar: { width: 36, height: 36, background: 'var(--green-100)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 },
   avatarCircle: { width: 36, height: 36, background: 'var(--green-200)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)', flexShrink: 0 },
   linkBtn: { background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: 0 },
