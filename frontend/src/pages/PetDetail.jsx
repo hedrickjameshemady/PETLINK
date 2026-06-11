@@ -44,9 +44,15 @@ export default function PetDetail() {
     } finally { setLoading(false); }
   };
 
+  const handleApplyClick = () => {
+    if (!user) { navigate('/login'); return; }
+    setShowForm(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) { navigate('/login'); return; }
+
     try {
       setSubmitting(true);
       await API.post('/adoptions', { ...form, pet_id: id });
@@ -118,7 +124,7 @@ export default function PetDetail() {
 
             {pet.status === 'Available' && (
               <button
-                onClick={() => setShowForm(true)}
+                onClick={handleApplyClick}
                 className="btn btn-primary"
                 style={{ marginTop: 20, width: '100%', justifyContent: 'center' }}
               >

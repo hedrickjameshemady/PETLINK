@@ -74,9 +74,15 @@ export default function Adopt() {
     return matchesStatus && matchesSearch;
   });
 
+  const handleApplyClick = (pet, photo) => {
+    if (!user) { navigate('/login'); return; }
+    setApplyPet({ ...pet, resolvedPhoto: photo });
+  };
+
   const handleApplySubmit = async (e) => {
     e.preventDefault();
     if (!user) { navigate('/login'); return; }
+
     try {
       setSubmitting(true);
       await API.post('/adoptions', { ...form, pet_id: applyPet.id });
@@ -191,7 +197,7 @@ export default function Adopt() {
                       </button>
                       {!isAdopted && !isPending ? (
                         <button
-                          onClick={() => setApplyPet({ ...pet, resolvedPhoto: photo })}
+                          onClick={() => handleApplyClick(pet, photo)}
                           style={styles.btnPrimary}
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>

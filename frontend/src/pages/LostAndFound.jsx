@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
@@ -266,12 +267,15 @@ function PetCard({ report, onClick }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function LostAndFound() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [reports,    setReports]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [filter,     setFilter]     = useState('All');
   const [search,     setSearch]     = useState('');
   const [modal,      setModal]      = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
+
 
   const fetchReports = () => {
     setLoading(true);
@@ -334,8 +338,8 @@ export default function LostAndFound() {
                   Report a lost or found pet and browse
                 </p>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <button style={btnHeroFill}    onClick={() => setModal('lost')}>🤍 Report a lost pet</button>
-                  <button style={btnHeroOutline} onClick={() => setModal('found')}>🤍 Report a found pet</button>
+                  <button style={btnHeroFill}    onClick={() => { if (!user) { navigate('/login'); return; } setModal('lost'); }}>🤍 Report a lost pet</button>
+<button style={btnHeroOutline} onClick={() => { if (!user) { navigate('/login'); return; } setModal('found'); }}>🤍 Report a found pet</button>
                 </div>
               </div>
 

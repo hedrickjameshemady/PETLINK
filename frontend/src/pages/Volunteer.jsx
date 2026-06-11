@@ -14,6 +14,8 @@ export default function Volunteer() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) { navigate('/login'); return; }
+    if (!user) { navigate('/login'); return; }
+    
     try {
       setLoading(true);
       await API.post('/volunteers/apply', form);

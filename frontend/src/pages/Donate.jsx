@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
 
 export function Donate() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState({ donor_name: user ? `${user.first_name} ${user.last_name}` : '', donor_email: user?.email || '', donor_phone: '', type: 'Individual', amount: '', purpose: '', message: '', campaign_id: '' });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -93,9 +95,18 @@ export function Donate() {
                 <label className="form-label">Message (optional)</label>
                 <textarea className="form-textarea" value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} placeholder="Leave a message..." />
               </div>
-              <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '12px 32px' }} disabled={loading}>
-                {loading ? 'Processing...' : '💚 Donate Now'}
-              </button>
+              <button
+  type="button"
+  className="btn btn-primary"
+  style={{ alignSelf: 'flex-start', padding: '12px 32px' }}
+  disabled={loading}
+  onClick={(e) => {
+    if (!user) { navigate('/login'); return; }
+    handleSubmit(e);
+  }}
+>
+  {loading ? 'Processing...' : '💚 Donate Now'}
+</button>
             </form>
           </div>
         )}

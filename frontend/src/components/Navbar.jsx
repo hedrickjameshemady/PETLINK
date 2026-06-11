@@ -76,11 +76,16 @@ export default function Navbar() {
               </div>
             )}
           </div>
-        ) : (
-          <Link to="/login" style={styles.loginBtn}>
-            <span>⬥</span> Login
-          </Link>
-        )}
+       ) : (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <Link to="/register" style={styles.registerBtn}>
+      Sign Up
+    </Link>
+    <Link to="/login" style={styles.loginBtn}>
+      <span>⬥</span> Login
+    </Link>
+  </div>
+)}
       </div>
     </nav>
   );
@@ -137,13 +142,25 @@ const styles = {
     fontWeight: 600,
   },
   actions: { flexShrink: 0 },
-  loginBtn: {
+loginBtn: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 6,
     padding: '9px 20px',
     background: 'var(--text-dark)',
     color: 'white',
+    borderRadius: 'var(--radius-full)',
+    fontSize: 14,
+    fontWeight: 500,
+    textDecoration: 'none',
+  },
+  registerBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '9px 20px',
+    background: 'transparent',
+    color: 'var(--text-dark)',
+    border: '1.5px solid var(--border)',
     borderRadius: 'var(--radius-full)',
     fontSize: 14,
     fontWeight: 500,
