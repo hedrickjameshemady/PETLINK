@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { API, useAuth } from '../context/AuthContext';
+import { API } from '../context/AuthContext';
 
 const PET_PHOTOS = [
   'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&h=400&fit=crop',
@@ -15,45 +15,23 @@ const PET_PHOTOS = [
   'https://images.unsplash.com/photo-1592754862816-1a21a4ea2281?w=400&h=400&fit=crop',
 ];
 
-const EMPTY_FORM = {
-  living_situation: '',
-  has_yard: false,
-  other_pets: '',
-  children_at_home: '',
-  experience_with_pets: '',
-  reason_for_adoption: '',
-  preferred_contact: 'Email',
-  full_name: '',
-  email: '',
-  phone: '',
-  address: '',
-};
+const PET_TYPES = ['All', 'Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
 
 export default function Adopt() {
   const [allPets, setAllPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('Available');
-  const [applyPet, setApplyPet] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const { user } = useAuth();
+  const [typeFilter, setTypeFilter] = useState('All');
   const navigate = useNavigate();
 
-  // Fetch ALL pets once (including adopted), filter on the frontend
   useEffect(() => { fetchPets(); }, []);
 
   const fetchPets = async () => {
     try {
       setLoading(true);
-      // Use /pets?status=All Status to get everything, or fetch /pets/all if admin
-      // The public endpoint excludes Adopted by default, so we pass status=Adopted separately
-      const [available, adopted] = await Promise.all([
-        API.get('/pets').catch(() => ({ data: [] })),
-        API.get('/pets?status=Adopted').catch(() => ({ data: [] })),
-      ]);
-      setAllPets([...available.data, ...adopted.data]);
+      // Only fetch Available and Pending — no Adopted
+      const { data } = await API.get('/pets');
+      setAllPets(data);
     } catch {
       setAllPets(DEMO_PETS);
     } finally {
@@ -61,264 +39,127 @@ export default function Adopt() {
     }
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-  };
-
-  // Filter pets based on current status filter and search
+  // Filter by type and search only — no status filter (all shown are Available/Pending)
   const filteredPets = allPets.filter(pet => {
-    const matchesStatus = status === 'All Status' ? true : pet.status === status;
+    const matchesType = typeFilter === 'All' ? true : pet.type === typeFilter;
     const matchesSearch = search.trim() === '' ? true :
       pet.name.toLowerCase().includes(search.toLowerCase()) ||
       (pet.breed || '').toLowerCase().includes(search.toLowerCase());
-    return matchesStatus && matchesSearch;
+    return matchesType && matchesSearch;
   });
 
-  const handleApplyClick = (pet, photo) => {
-    if (!user) { navigate('/login'); return; }
-    setApplyPet({ ...pet, resolvedPhoto: photo });
-  };
+  // Group filtered pets by type
+  const grouped = filteredPets.reduce((acc, pet) => {
+    const key = pet.type || 'Others';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(pet);
+    return acc;
+  }, {});
 
-  const handleApplySubmit = async (e) => {
-    e.preventDefault();
-    if (!user) { navigate('/login'); return; }
-
-    try {
-      setSubmitting(true);
-      await API.post('/adoptions', { ...form, pet_id: applyPet.id });
-      setSuccess(true);
-    } catch (err) {
-      alert(err.response?.data?.error || 'Failed to submit application');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const closeModal = () => {
-    setApplyPet(null);
-    setSuccess(false);
-    setForm(EMPTY_FORM);
-  };
+  const groupOrder = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
+  const sortedGroups = Object.keys(grouped).sort(
+    (a, b) => groupOrder.indexOf(a) - groupOrder.indexOf(b)
+  );
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
 
-      <main style={{ flex: 1, maxWidth: 1200, margin: '0 auto', width: '100%', padding: '32px 32px' }}>
+      <main style={{ flex: 1, maxWidth: 1200, margin: '0 auto', width: '100%', padding: '32px' }}>
         <h1 style={styles.pageTitle}>Adopt a Pet</h1>
-
-        <div style={styles.infoBox}>
-          <span style={styles.infoIcon}>ℹ</span>
-          <p style={{ fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, margin: 0 }}>
-            This page allows you to browse available pets for adoption. You may view each pet's photo, basic details, and adoption status.
-            Use the search and filter options to narrow your selection based on species, age, or availability. Select a pet to view more information
-            and proceed with the adoption application. All actions can be completed using a mouse or keyboard, and clear labels are
-            provided to help you navigate easily.
-          </p>
-        </div>
+        <p style={{ color: 'var(--text-muted)', fontSize: 15, marginBottom: 28 }}>
+          Browse our available pets and find your perfect companion. Click "View Details" to learn more and apply for adoption.
+        </p>
 
         {/* Filters */}
         <div style={styles.filters}>
-          <form onSubmit={handleSearch} style={styles.searchBox}>
+          {/* Search */}
+          <div style={styles.searchBox}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
             <input
               type="text"
-              placeholder="Search by Name or breed"
+              placeholder="Search by name or breed..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={styles.searchInput}
             />
-            <button type="submit" style={styles.searchBtn}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-              </svg>
-            </button>
-          </form>
-          <select value={status} onChange={e => setStatus(e.target.value)} style={styles.filterSelect}>
-            <option value="All Status">All Status</option>
-            <option value="Available">Available</option>
-            <option value="Pending">Pending</option>
-            <option value="Adopted">Adopted</option>
-          </select>
-          <button style={styles.filterBtn}>
-            Personality
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 6 }}>
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-            </svg>
-          </button>
+          </div>
+
+          {/* Type filter tabs */}
+          <div style={styles.typeTabs}>
+            {PET_TYPES.map(type => (
+              <button
+                key={type}
+                onClick={() => setTypeFilter(type)}
+                style={{
+                  ...styles.typeTab,
+                  ...(typeFilter === type ? styles.typeTabActive : {}),
+                }}
+              >
+                {type === 'Dog' ? '🐶' : type === 'Cat' ? '🐱' : type === 'Bird' ? '🐦' : type === 'Rabbit' ? '🐰' : type === 'Others' ? '🐾' : '✨'} {type}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Pet Grid */}
+        {/* Pet Groups */}
         {loading ? (
           <div className="loading-spinner"><div className="spinner" /></div>
         ) : filteredPets.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">🐾</div>
             <h3>No pets found</h3>
-            <p>Try adjusting your search or filters</p>
+            <p>Try adjusting your search or filter</p>
           </div>
         ) : (
-          <div style={styles.grid}>
-            {filteredPets.map((pet, i) => {
-              const photo = pet.photo ? pet.photo : PET_PHOTOS[i % PET_PHOTOS.length];
-              const isAdopted = pet.status === 'Adopted';
-              const isPending = pet.status === 'Pending';
-              return (
-                <div key={pet.id} style={{ ...styles.petCard, opacity: isAdopted ? 0.85 : 1 }}>
-                  <div style={{ ...styles.petImgWrap, position: 'relative' }}>
-                    <img
-                      src={photo}
-                      alt={pet.name}
-                      style={styles.petImg}
-                      onError={e => { e.target.onerror = null; e.target.src = PET_PHOTOS[i % PET_PHOTOS.length]; }}
-                    />
-                    {/* Status badge overlay */}
-                    {(isAdopted || isPending) && (
-                      <div style={{
-                        position: 'absolute', top: 10, left: 10,
-                        background: isAdopted ? '#1d4ed8' : '#d97706',
-                        color: 'white', fontSize: 11, fontWeight: 700,
-                        padding: '3px 10px', borderRadius: 20, letterSpacing: '0.04em',
-                      }}>
-                        {isAdopted ? 'ADOPTED' : 'PENDING'}
+          sortedGroups.map(type => (
+            <div key={type} style={{ marginBottom: 40 }}>
+              {/* Section header */}
+              <div style={styles.sectionHeader}>
+                <span style={styles.sectionIcon}>
+                  {type === 'Dog' ? '🐶' : type === 'Cat' ? '🐱' : type === 'Bird' ? '🐦' : type === 'Rabbit' ? '🐰' : '🐾'}
+                </span>
+                <h2 style={styles.sectionTitle}>{type}s</h2>
+                <span style={styles.sectionCount}>{grouped[type].length} available</span>
+              </div>
+
+              <div style={styles.grid}>
+                {grouped[type].map((pet, i) => {
+                  const photo = pet.photo ? pet.photo : PET_PHOTOS[i % PET_PHOTOS.length];
+                  const isPending = pet.status === 'Pending';
+                  return (
+                    <div key={pet.id} style={styles.petCard}>
+                      <div style={{ position: 'relative' }}>
+                        <img
+                          src={photo}
+                          alt={pet.name}
+                          style={styles.petImg}
+                          onError={e => { e.target.onerror = null; e.target.src = PET_PHOTOS[i % PET_PHOTOS.length]; }}
+                        />
+                        {isPending && (
+                          <div style={styles.pendingBadge}>⏳ PENDING</div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div style={styles.petInfo}>
-                    <div style={{ marginBottom: 10 }}>
-                      <strong style={{ fontSize: 15, color: 'var(--text-dark)' }}>{pet.name}</strong>
-                      <span style={styles.petMeta}> {pet.breed} • {pet.age_years} yr{pet.age_years !== 1 ? 's' : ''} • {pet.gender}</span>
-                    </div>
-                    <div style={styles.petActions}>
-                      <button
-                        onClick={() => navigate(`/adopt/${pet.id}`, { state: { photo } })}
-                        style={styles.btnOutline}
-                      >
-                        View Details
-                      </button>
-                      {!isAdopted && !isPending ? (
+                      <div style={styles.petInfo}>
+                        <strong style={{ fontSize: 15, color: 'var(--text-dark)' }}>{pet.name}</strong>
+                        <p style={styles.petMeta}>{pet.breed} • {pet.age_years} yr{pet.age_years !== 1 ? 's' : ''} • {pet.gender}</p>
                         <button
-                          onClick={() => handleApplyClick(pet, photo)}
-                          style={styles.btnPrimary}
+                          onClick={() => navigate(`/adopt/${pet.id}`, { state: { photo } })}
+                          style={styles.btnOutline}
                         >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
-                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                          </svg>
-                          Apply for Adoption
+                          View Details
                         </button>
-                      ) : (
-                        <span style={{
-                          padding: '7px 14px',
-                          borderRadius: 'var(--radius-full)',
-                          fontSize: 13, fontWeight: 600,
-                          background: isAdopted ? '#eff6ff' : '#fffbeb',
-                          color: isAdopted ? '#1d4ed8' : '#d97706',
-                          border: `1.5px solid ${isAdopted ? '#bfdbfe' : '#fde68a'}`,
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                        }}>
-                          {isAdopted ? '🏠 Already Adopted' : '⏳ Pending'}
-                        </span>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))
         )}
       </main>
-
-      {/* Adoption Modal */}
-      {applyPet && !success && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 className="modal-title">Adoption Application — {applyPet.name}</h2>
-              <button className="modal-close" onClick={closeModal}>✕</button>
-            </div>
-            <form onSubmit={handleApplySubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="form-group">
-                <label className="form-label">Living Situation</label>
-                <select className="form-select" value={form.living_situation} onChange={e => setForm({...form, living_situation: e.target.value})} required>
-                  <option value="">Select...</option>
-                  <option>House with yard</option>
-                  <option>House without yard</option>
-                  <option>Apartment</option>
-                  <option>Condo</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Do you have a yard?</label>
-                <select className="form-select" value={form.has_yard} onChange={e => setForm({...form, has_yard: e.target.value === 'true'})}>
-                  <option value="false">No</option>
-                  <option value="true">Yes</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Other pets at home</label>
-                <input className="form-input" placeholder="E.g. 1 dog, 2 cats or None" value={form.other_pets} onChange={e => setForm({...form, other_pets: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Children at home</label>
-                <select className="form-select" value={form.children_at_home} onChange={e => setForm({...form, children_at_home: e.target.value})}>
-                  <option value="">Select...</option>
-                  <option>None</option>
-                  <option>Infants (0-2)</option>
-                  <option>Young children (3-10)</option>
-                  <option>Teens (11-17)</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Experience with pets</label>
-                <textarea className="form-textarea" placeholder="Describe your experience..." value={form.experience_with_pets} onChange={e => setForm({...form, experience_with_pets: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Why do you want to adopt {applyPet.name}?</label>
-                <textarea className="form-textarea" placeholder="Tell us why you'd be a great match..." value={form.reason_for_adoption} onChange={e => setForm({...form, reason_for_adoption: e.target.value})} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Preferred Contact Method</label>
-                <select className="form-select" value={form.preferred_contact} onChange={e => setForm({...form, preferred_contact: e.target.value})}>
-                  <option>Email</option>
-                  <option>Phone</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Full Name</label>
-                <input className="form-input" placeholder="Your full name" value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Email Address</label>
-                <input className="form-input" type="email" placeholder="your@email.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Phone Number</label>
-                <input className="form-input" type="tel" placeholder="e.g. 09171234567" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Address</label>
-                <input className="form-input" placeholder="Your current address" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
-              </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
-                <button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Submitting...' : 'Submit Application'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {success && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ textAlign: 'center', padding: '48px 32px' }}>
-            <div style={{ fontSize: 56, marginBottom: 16 }}>🐾</div>
-            <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 24, marginBottom: 12 }}>Application Submitted!</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>Thank you for applying to adopt {applyPet.name}. We'll review your application and get back to you soon.</p>
-            <button className="btn btn-primary" onClick={closeModal} style={{ margin: '0 auto' }}>Back to Adopt</button>
-          </div>
-        </div>
-      )}
 
       <Footer />
     </div>
@@ -326,29 +167,49 @@ export default function Adopt() {
 }
 
 const DEMO_PETS = [
-  { id: 1, name: 'Kitty', type: 'Dog', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
-  { id: 2, name: 'Kitty', type: 'Cat', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
-  { id: 3, name: 'Kitty', type: 'Dog', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Available' },
-  { id: 4, name: 'Kitty', type: 'Cat', breed: 'Maine Coon', age_years: 2, gender: 'Male', status: 'Adopted' },
+  { id: 1, name: 'Buddy', type: 'Dog', breed: 'Labrador', age_years: 2, gender: 'Male', status: 'Available' },
+  { id: 2, name: 'Mittens', type: 'Cat', breed: 'Persian', age_years: 1, gender: 'Female', status: 'Available' },
+  { id: 3, name: 'Max', type: 'Dog', breed: 'Beagle', age_years: 3, gender: 'Male', status: 'Pending' },
+  { id: 4, name: 'Luna', type: 'Cat', breed: 'Siamese', age_years: 2, gender: 'Female', status: 'Available' },
+  { id: 5, name: 'Tweety', type: 'Bird', breed: 'Canary', age_years: 1, gender: 'Male', status: 'Available' },
+  { id: 6, name: 'Coco', type: 'Rabbit', breed: 'Holland Lop', age_years: 1, gender: 'Female', status: 'Available' },
 ];
 
 const styles = {
-  pageTitle: { fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 700, marginBottom: 16, color: 'var(--text-dark)' },
-  infoBox: { display: 'flex', gap: 10, background: '#f0faf4', border: '1px solid #c3e6cb', borderRadius: 8, padding: '14px 18px', marginBottom: 24, alignItems: 'flex-start' },
-  infoIcon: { color: 'white', fontWeight: 700, flexShrink: 0, marginTop: 1, background: 'var(--primary)', borderRadius: '50%', width: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 },
-  filters: { display: 'flex', gap: 10, marginBottom: 28, alignItems: 'center', flexWrap: 'wrap' },
-  searchBox: { display: 'flex', position: 'relative', flex: '1 1 260px', maxWidth: 340 },
-  searchInput: { flex: 1, padding: '10px 42px 10px 16px', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)', fontSize: 14, fontFamily: 'inherit', outline: 'none' },
-  searchBtn: { position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: 0 },
-  filterSelect: { padding: '10px 16px', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)', fontSize: 14, fontFamily: 'inherit', outline: 'none', background: 'white', cursor: 'pointer' },
-  filterBtn: { padding: '10px 16px', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)', fontSize: 14, background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', fontFamily: 'inherit' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 },
+  pageTitle: { fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 700, marginBottom: 8, color: 'var(--text-dark)' },
+  filters: { display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 },
+  searchBox: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)',
+    padding: '10px 18px', maxWidth: 400, background: 'white',
+  },
+  searchInput: { border: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 14, flex: 1, color: 'var(--text-dark)' },
+  typeTabs: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+  typeTab: {
+    padding: '8px 18px', borderRadius: 'var(--radius-full)', fontSize: 13, fontWeight: 500,
+    border: '1.5px solid var(--border)', background: 'white', color: 'var(--text-mid)',
+    cursor: 'pointer', transition: 'all 0.15s',
+  },
+  typeTabActive: {
+    background: 'var(--primary)', color: 'white', border: '1.5px solid var(--primary)', fontWeight: 600,
+  },
+  sectionHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, borderBottom: '2px solid var(--green-100)', paddingBottom: 10 },
+  sectionIcon: { fontSize: 22 },
+  sectionTitle: { fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 700, color: 'var(--text-dark)', margin: 0 },
+  sectionCount: { fontSize: 12, color: 'var(--text-muted)', background: 'var(--green-50)', border: '1px solid var(--green-200)', borderRadius: 20, padding: '2px 10px', fontWeight: 500 },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 20 },
   petCard: { background: 'white', borderRadius: 12, border: '1.5px solid var(--border)', overflow: 'hidden' },
-  petImgWrap: { width: '100%', height: 220, overflow: 'hidden', background: '#f5f5f5' },
-  petImg: { width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' },
-  petInfo: { padding: '14px 16px 16px' },
-  petMeta: { color: 'var(--text-muted)', fontSize: 13, fontWeight: 400 },
-  petActions: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
-  btnOutline: { padding: '7px 14px', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)', fontSize: 13, fontWeight: 500, color: 'var(--text-dark)', background: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' },
-  btnPrimary: { padding: '7px 14px', border: '1.5px solid var(--primary)', borderRadius: 'var(--radius-full)', fontSize: 13, fontWeight: 500, color: 'var(--primary)', background: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' },
+  petImg: { width: '100%', height: 200, objectFit: 'cover', objectPosition: 'top', display: 'block' },
+  pendingBadge: {
+    position: 'absolute', top: 10, left: 10,
+    background: '#d97706', color: 'white', fontSize: 11, fontWeight: 700,
+    padding: '3px 10px', borderRadius: 20, letterSpacing: '0.04em',
+  },
+  petInfo: { padding: '14px 16px 16px', display: 'flex', flexDirection: 'column', gap: 4 },
+  petMeta: { color: 'var(--text-muted)', fontSize: 13, margin: '0 0 8px' },
+  btnOutline: {
+    padding: '7px 14px', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)',
+    fontSize: 13, fontWeight: 500, color: 'var(--text-dark)', background: 'white',
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', alignSelf: 'flex-start',
+  },
 };
