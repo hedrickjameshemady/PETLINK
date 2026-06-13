@@ -157,4 +157,93 @@ router.get('/campaigns/:id/donations', authMiddleware, adminMiddleware, async (r
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Dashboard detail data: recent pets, pending applications, upcoming events, volunteers, top donors
+router.get('/dashboard-detail', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    // Recent pet arrivals (last 4, available only)
+    const [recentPets] = await db.query(
+      `SELECT id, name, breed, type, gender, age_years, status, photo, created_at
+       FROM pets ORDER BY created_at DESC LIMIT 4`
+    );
+
+    // Pending adoption + volunteer applications
+    const [pendingAdoptions] = await db.query(
+      `SELECT aa.id, aa.applied_at, aa.status, 'Adoption Application' AS app_type,
+              CONCAT(u.first_name, ' ', u.last_name) AS applicant_name,
+              u.profile_photo AS applicant_photo
+       FROM adoption_applications aa
+       JOIN users u ON aa.applicant_id = u.id
+       WHERE aa.status = 'Pending Review'
+       ORDER BY aa.applied_at DESC LIMIT 3`
+    );
+    const [pendingVolunteers] = await db.query(
+      `SELECT va.id, va.applied_at, va.status, 'Volunteer Application' AS app_type,
+              CONCAT(u.first_name, ' ', u.last_name) AS applicant_name,
+              u.profile_photo AS applicant_photo
+       FROM volunteer_applications va
+       JOIN users u ON va.user_id = u.id
+       WHERE va.status = 'Pending'
+       ORDER BY va.applied_at DESC LIMIT 3`
+    );
+    const pendingApplications = [...pendingAdoptions, ...pendingVolunteers]
+      .sort((a, b) => new Date(b.applied_at) - new Date(a.applied_at))
+      .slice(0, 3);
+
+    // Upcoming events (status Upcoming or Active, ordered by start_date)
+    const [upcomingEvents] = await db.query(
+      `SELECT id, title, type, start_date, location, status
+       FROM campaigns
+       WHERE status IN ('Upcoming','Active')
+       ORDER BY start_date ASC LIMIT 3`
+    );
+
+    // Total volunteers + new signups this week
+    const [[volTotal]] = await db.query(
+      `SELECT COUNT(*) AS total FROM volunteers WHERE status = 'Active'`
+    );
+    const [newVolunteers] = await db.query(
+      `SELECT v.id, CONCAT(u.first_name, ' ', u.last_name) AS name, v.role, v.created_at
+       FROM volunteers v JOIN users u ON v.user_id = u.id
+       WHERE v.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       ORDER BY v.created_at DESC LIMIT 5`
+    );
+
+    // Total donations this week
+    const [[donWeek]] = await db.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM donations
+       WHERE donated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`
+    );
+    const [[donPrevWeek]] = await db.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM donations
+       WHERE donated_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+         AND donated_at < DATE_SUB(NOW(), INTERVAL 7 DAY)`
+    );
+
+    // Top donors (by total amount donated)
+    const [topDonors] = await db.query(
+      `SELECT donor_name, donor_email, SUM(amount) AS total_donated, COUNT(*) AS donation_count
+       FROM donations
+       GROUP BY donor_email, donor_name
+       ORDER BY total_donated DESC LIMIT 3`
+    );
+
+    res.json({
+      recentPets,
+      pendingApplications,
+      upcomingEvents,
+      volunteers: {
+        total: Number(volTotal.total),
+        newSignups: newVolunteers,
+      },
+      donations: {
+        thisWeek: Number(donWeek.total),
+        prevWeek: Number(donPrevWeek.total),
+        topDonors,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

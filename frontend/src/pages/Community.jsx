@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
@@ -7,6 +8,7 @@ export default function Community() {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [joined, setJoined] = useState({});
 
   useEffect(() => {
@@ -18,7 +20,7 @@ export default function Community() {
 
   const handleJoin = async (campaignId) => {
     if (!user) {
-      alert('Please log in to join this event.');
+      navigate('/login');
       return;
     }
     if (joined[campaignId]) return;

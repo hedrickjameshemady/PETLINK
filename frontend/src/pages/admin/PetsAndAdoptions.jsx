@@ -13,8 +13,9 @@ export default function PetsAndAdoptions() {
   const [editPhotoFile, setEditPhotoFile] = useState(null);
   const [editPhotoPreview, setEditPhotoPreview] = useState(null);
   const [viewApp, setViewApp] = useState(null);
+  const [viewPet, setViewPet] = useState(null);
   const [toast, setToast] = useState('');
-  const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [] });
+  const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '' });
   const [petPhotoFile, setPetPhotoFile] = useState(null);
   const [petPhotoPreview, setPetPhotoPreview] = useState(null);
   const [assessForm, setAssessForm] = useState({ pet_id: '', traits: '', description: '', compatibility_notes: '' });
@@ -58,7 +59,7 @@ export default function PetsAndAdoptions() {
       showToast('Pet added (demo mode)!');
       setShowAddPet(false);
     }
-    setPetForm({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [] });
+    setPetForm({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '' });
     setPetPhotoFile(null);
     setPetPhotoPreview(null);
   };
@@ -147,8 +148,8 @@ export default function PetsAndAdoptions() {
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
 
-  const activePets = pets.filter(p => p.status !== 'Adopted');
-  const finishedPets = pets.filter(p => p.status === 'Adopted');
+  const activePets = pets.filter(p => p.status !== 'Adopted').sort((a, b) => a.pet_id.localeCompare(b.pet_id));
+const finishedPets = pets.filter(p => p.status === 'Adopted').sort((a, b) => a.pet_id.localeCompare(b.pet_id));
   const pendingApps = applications.filter(a => a.status === 'Pending Review');
   const finishedApps = applications.filter(a => a.status !== 'Pending Review');
 
@@ -178,7 +179,7 @@ export default function PetsAndAdoptions() {
       <td>{statusBadge(pet.status)}</td>
       <td>
         <div style={{ display: 'flex', gap: 12 }}>
-          <button style={styles.linkBtn}onClick={() => { setEditPet(pet); setEditForm({ name: pet.name, type: pet.type, breed: pet.breed, age_years: pet.age_years, gender: pet.gender, health_status: pet.health_status, status: pet.status, description: pet.description || '' }); setEditPhotoFile(null); setEditPhotoPreview(null); }}>Edit</button>
+          <button style={styles.linkBtn} onClick={() => setViewPet(pet)}>View</button>
           <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleDeletePet(pet)}>Delete</button>
         </div>
       </td>
@@ -477,6 +478,35 @@ export default function PetsAndAdoptions() {
                 />
               </div>
 
+              {/* Medical Records */}
+              <div style={{ borderTop: '1.5px solid #e5e7eb', paddingTop: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: 'var(--text-dark)' }}>
+                  🏥 Medical Records <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-muted)' }}>(optional — leave blank if not yet checked up)</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Veterinary Name</label>
+                    <input className="form-input" placeholder="e.g. Dr. Juan dela Cruz" value={petForm.vet_name} onChange={e => setPetForm({ ...petForm, vet_name: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Clinic Name</label>
+                    <input className="form-input" placeholder="e.g. PetCare Animal Clinic" value={petForm.clinic_name} onChange={e => setPetForm({ ...petForm, clinic_name: e.target.value })} />
+                  </div>
+                </div>
+                <div className="form-group" style={{ marginTop: 4 }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Last Checkup Date</label>
+                  <input className="form-input" type="date" value={petForm.last_checkup_date} onChange={e => setPetForm({ ...petForm, last_checkup_date: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ marginTop: 4 }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Vaccines Given</label>
+                  <input className="form-input" placeholder="e.g. Rabies, Distemper, Parvovirus" value={petForm.vaccines_given} onChange={e => setPetForm({ ...petForm, vaccines_given: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ marginTop: 4 }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Medical Notes / Conditions</label>
+                  <textarea className="form-textarea" placeholder="e.g. No known conditions, previously treated for mange" value={petForm.medical_notes} onChange={e => setPetForm({ ...petForm, medical_notes: e.target.value })} style={{ minHeight: 70 }} />
+                </div>
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4, marginBottom: 4 }}>
                 <button type="submit" className="btn btn-primary" style={{ minWidth: 120, margin: 0 }}>Add</button>
               </div>
@@ -485,7 +515,62 @@ export default function PetsAndAdoptions() {
           </div>
         </div>
       )}
+      {/* ─── VIEW PET MODAL ─── */}
+      {viewPet && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewPet(null)}>
+          <div className="modal" style={{ maxWidth: 520, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Pet Details</h2>
+              <button className="modal-close" onClick={() => setViewPet(null)}>✕</button>
+            </div>
 
+            {/* Photo */}
+            <div style={{ width: '100%', height: 200, borderRadius: 12, overflow: 'hidden', marginBottom: 20, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {viewPet.photo
+                ? <img src={`http://localhost:5000${viewPet.photo}`} alt={viewPet.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span style={{ fontSize: 48 }}>🐾</span>
+              }
+            </div>
+
+            {/* Details */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Pet ID</span><span>{viewPet.pet_id}</span></div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Name</span><span style={{ fontWeight: 600 }}>{viewPet.name}</span></div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Type</span><span>{viewPet.type}</span></div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Breed</span><span>{viewPet.breed}</span></div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Age</span><span>{viewPet.age_years} year{viewPet.age_years !== 1 ? 's' : ''} old</span></div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Gender</span><span>{viewPet.gender}</span></div>
+              {viewPet.weight && <div style={styles.detailRow}><span style={styles.detailLbl}>Weight</span><span>{viewPet.weight} kg</span></div>}
+              {viewPet.color && <div style={styles.detailRow}><span style={styles.detailLbl}>Color</span><span>{viewPet.color}</span></div>}
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Health Status</span>{statusBadge(viewPet.health_status)}</div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Status</span>{statusBadge(viewPet.status)}</div>
+              {viewPet.intake_date && <div style={styles.detailRow}><span style={styles.detailLbl}>Intake Date</span><span>{new Date(viewPet.intake_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span></div>}
+              {viewPet.description && <div style={styles.detailRow}><span style={styles.detailLbl}>Description</span><span style={{ lineHeight: 1.6 }}>{viewPet.description}</span></div>}
+
+              {/* Medical Records */}
+              <div style={{ borderTop: '1.5px solid #e5e7eb', paddingTop: 14, marginTop: 4 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-dark)', marginBottom: 10 }}>🏥 Medical Records</div>
+                {!viewPet.vet_name && !viewPet.clinic_name && !viewPet.last_checkup_date && !viewPet.vaccines_given && !viewPet.medical_notes ? (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>No medical records yet.</div>
+                ) : (
+                  <>
+                    {viewPet.vet_name && <div style={styles.detailRow}><span style={styles.detailLbl}>Veterinarian</span><span>{viewPet.vet_name}</span></div>}
+                    {viewPet.clinic_name && <div style={styles.detailRow}><span style={styles.detailLbl}>Clinic</span><span>{viewPet.clinic_name}</span></div>}
+                    {viewPet.last_checkup_date && <div style={styles.detailRow}><span style={styles.detailLbl}>Last Checkup</span><span>{new Date(viewPet.last_checkup_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span></div>}
+                    {viewPet.vaccines_given && <div style={styles.detailRow}><span style={styles.detailLbl}>Vaccines Given</span><span>{viewPet.vaccines_given}</span></div>}
+                    {viewPet.medical_notes && <div style={styles.detailRow}><span style={styles.detailLbl}>Medical Notes</span><span style={{ lineHeight: 1.6 }}>{viewPet.medical_notes}</span></div>}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline btn-sm" onClick={() => { setViewPet(null); setEditPet(viewPet); setEditForm({ name: viewPet.name, type: viewPet.type, breed: viewPet.breed, age_years: viewPet.age_years, gender: viewPet.gender, health_status: viewPet.health_status, status: viewPet.status, description: viewPet.description || '', vet_name: viewPet.vet_name || '', clinic_name: viewPet.clinic_name || '', last_checkup_date: viewPet.last_checkup_date || '', vaccines_given: viewPet.vaccines_given || '', medical_notes: viewPet.medical_notes || '' }); setEditPhotoFile(null); setEditPhotoPreview(null); }}>Edit</button>
+              <button className="btn btn-outline btn-sm" onClick={() => setViewPet(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ─── VIEW APPLICATION MODAL ─── */}
       {viewApp && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewApp(null)}>
@@ -617,6 +702,36 @@ export default function PetsAndAdoptions() {
                 <label className="form-label">Description</label>
                 <textarea className="form-textarea" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
               </div>
+
+              {/* Medical Records */}
+              <div style={{ borderTop: '1.5px solid #e5e7eb', paddingTop: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: 'var(--text-dark)' }}>
+                  🏥 Medical Records <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-muted)' }}>(optional)</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div className="form-group">
+                    <label className="form-label">Veterinary Name</label>
+                    <input className="form-input" placeholder="e.g. Dr. Juan dela Cruz" value={editForm.vet_name || ''} onChange={e => setEditForm({ ...editForm, vet_name: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Clinic Name</label>
+                    <input className="form-input" placeholder="e.g. PetCare Animal Clinic" value={editForm.clinic_name || ''} onChange={e => setEditForm({ ...editForm, clinic_name: e.target.value })} />
+                  </div>
+                </div>
+                <div className="form-group" style={{ marginTop: 4 }}>
+                  <label className="form-label">Last Checkup Date</label>
+                  <input className="form-input" type="date" value={editForm.last_checkup_date || ''} onChange={e => setEditForm({ ...editForm, last_checkup_date: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ marginTop: 4 }}>
+                  <label className="form-label">Vaccines Given</label>
+                  <input className="form-input" placeholder="e.g. Rabies, Distemper, Parvovirus" value={editForm.vaccines_given || ''} onChange={e => setEditForm({ ...editForm, vaccines_given: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ marginTop: 4 }}>
+                  <label className="form-label">Medical Notes / Conditions</label>
+                  <textarea className="form-textarea" placeholder="e.g. No known conditions" value={editForm.medical_notes || ''} onChange={e => setEditForm({ ...editForm, medical_notes: e.target.value })} style={{ minHeight: 70 }} />
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-outline" onClick={() => { setEditPet(null); setEditPhotoFile(null); setEditPhotoPreview(null); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save Changes</button>

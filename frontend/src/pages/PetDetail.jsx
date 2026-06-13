@@ -102,11 +102,35 @@ export default function PetDetail() {
               <div style={styles.detailItem}><span style={styles.detailLabel}>Breed</span><span>{pet.breed}</span></div>
               <div style={styles.detailItem}><span style={styles.detailLabel}>Age</span><span>{pet.age_years} yr(s)</span></div>
               <div style={styles.detailItem}><span style={styles.detailLabel}>Gender</span><span>{pet.gender}</span></div>
-              <div style={styles.detailItem}><span style={styles.detailLabel}>Vaccinated</span><span>{pet.vaccination_status ? 'Yes' : 'No'}</span></div>
-              <div style={styles.detailItem}><span style={styles.detailLabel}>Neutered</span><span>{pet.neutered ? 'Yes' : 'No'}</span></div>
             </div>
 
             {pet.description && <p style={styles.desc}>{pet.description}</p>}
+
+            {/* Medical Records */}
+            <div style={{ borderTop: '1.5px solid #e5e7eb', paddingTop: 14, marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-dark)', marginBottom: 10 }}>🏥 Medical Records</div>
+              {!pet.vet_name && !pet.clinic_name && !pet.last_checkup_date && !pet.vaccines_given && !pet.medical_notes ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>No medical records on file yet.</div>
+              ) : (
+                <div style={styles.detailGrid}>
+                  {pet.vet_name && (
+                    <div style={styles.detailItem}><span style={styles.detailLabel}>Veterinarian</span><span>{pet.vet_name}</span></div>
+                  )}
+                  {pet.clinic_name && (
+                    <div style={styles.detailItem}><span style={styles.detailLabel}>Clinic</span><span>{pet.clinic_name}</span></div>
+                  )}
+                  {pet.last_checkup_date && (
+                    <div style={styles.detailItem}><span style={styles.detailLabel}>Last Checkup</span><span>{new Date(pet.last_checkup_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span></div>
+                  )}
+                  {pet.vaccines_given && (
+                    <div style={{ ...styles.detailItem, gridColumn: 'span 2' }}><span style={styles.detailLabel}>Vaccines</span><span>{pet.vaccines_given}</span></div>
+                  )}
+                  {pet.medical_notes && (
+                    <div style={{ ...styles.detailItem, gridColumn: 'span 2' }}><span style={styles.detailLabel}>Notes</span><span style={{ lineHeight: 1.6 }}>{pet.medical_notes}</span></div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {pet.assessment && (
               <div style={styles.assessment}>

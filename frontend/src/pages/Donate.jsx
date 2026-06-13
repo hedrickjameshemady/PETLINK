@@ -53,7 +53,7 @@ export function Donate() {
         ) : (
           <div className="card" style={{ marginTop: 28 }}>
             <h2 style={{ fontWeight: 700, fontSize: 17, marginBottom: 18 }}>Donation Details</h2>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form onSubmit={(e) => { e.preventDefault(); if (!user) { navigate('/login'); return; } handleSubmit(e); }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="form-group">
                   <label className="form-label">Your Name *</label>

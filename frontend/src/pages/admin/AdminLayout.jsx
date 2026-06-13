@@ -38,12 +38,12 @@ export default function AdminLayout() {
       <aside style={styles.sidebar}>
         {/* Logo */}
         <div style={styles.sidebarLogo}>
-          <span style={{ fontSize: 20 }}>🐾</span>
-          <div>
-            <div style={styles.logoName}>PETLINK</div>
-            <div style={styles.logoSub}>Animal Management System</div>
-          </div>
-        </div>
+  <img src="/src/assets/image 16.png" alt="PetLink Logo" style={{ width: 36, height: 36, objectFit: 'contain' }} />
+  <div>
+    <div style={styles.logoName}>PETLINK</div>
+    <div style={styles.logoSub}>Animal Management System</div>
+  </div>
+</div>
 
         {/* Main Modules */}
         <div style={styles.sectionLabel}>Main Modules</div>

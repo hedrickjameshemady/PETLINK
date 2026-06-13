@@ -15,7 +15,7 @@ export default function Volunteer() {
     e.preventDefault();
     if (!user) { navigate('/login'); return; }
     if (!user) { navigate('/login'); return; }
-    
+
     try {
       setLoading(true);
       await API.post('/volunteers/apply', form);
@@ -57,7 +57,7 @@ export default function Volunteer() {
         ) : (
           <div className="card" style={{ marginTop: 32 }}>
             <h2 style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Volunteer Application Form</h2>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <form onSubmit={(e) => { e.preventDefault(); if (!user) { navigate('/login'); return; } handleSubmit(e); }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div className="form-group">
                   <label className="form-label">Availability</label>
@@ -81,9 +81,18 @@ export default function Volunteer() {
                 <label className="form-label">Why do you want to volunteer?</label>
                 <textarea className="form-textarea" placeholder="Share your motivation..." value={form.motivation} onChange={e => setForm({ ...form, motivation: e.target.value })} required />
               </div>
-              <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '12px 32px' }} disabled={loading}>
-                {loading ? 'Submitting...' : 'Submit Application'}
-              </button>
+              <button
+  type="button"
+  className="btn btn-primary"
+  style={{ alignSelf: 'flex-start', padding: '12px 32px' }}
+  disabled={loading}
+  onClick={(e) => {
+    if (!user) { navigate('/login'); return; }
+    handleSubmit(e);
+  }}
+>
+  {loading ? 'Submitting...' : 'Submit Application'}
+</button>
             </form>
           </div>
         )}

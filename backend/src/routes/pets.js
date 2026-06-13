@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
 // Get ALL pets including Adopted (admin only)
 router.get('/all', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM pets ORDER BY created_at DESC');
+    const [rows] = await db.query('SELECT * FROM pets ORDER BY pet_id ASC');
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -79,16 +79,17 @@ router.get('/:id', async (req, res) => {
 // Create pet (admin/staff)
 router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date } = req.body;
+    const { name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes } = req.body;
     const photoUrl = req.file ? `/uploads/pets/${req.file.filename}` : null;
 
-    const count = await db.query('SELECT COUNT(*) as cnt FROM pets');
-    const petId = `PET${String(count[0][0].cnt + 1).padStart(3, '0')}`;
+    const [[maxRow]] = await db.query("SELECT MAX(CAST(SUBSTRING(pet_id, 4) AS UNSIGNED)) as maxNum FROM pets");
+    const nextId = (maxRow.maxNum || 0) + 1;
+    const petId = `PET${String(nextId).padStart(3, '0')}`;
 
     const [result] = await db.query(
-      `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by, photo)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [petId, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status || 'Available', description, intake_date, req.user.id, photoUrl]
+      `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by, photo, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [petId, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status || 'Available', description, intake_date, req.user.id, photoUrl, vet_name || null, clinic_name || null, last_checkup_date || null, vaccines_given || null, medical_notes || null]
     );
     res.status(201).json({ id: result.insertId, pet_id: petId, message: 'Pet added successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -97,9 +98,9 @@ router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async 
 // Update pet
 router.put('/:id', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { name, type, breed, age_years, gender, health_status, status, description } = req.body;
-    const fields = [name, type, breed, age_years, gender, health_status, status, description];
-    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, health_status=?, status=?, description=?';
+    const { name, type, breed, age_years, gender, health_status, status, description, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes } = req.body;
+    const fields = [name, type, breed, age_years, gender, health_status, status, description, vet_name || null, clinic_name || null, last_checkup_date || null, vaccines_given || null, medical_notes || null];
+    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, health_status=?, status=?, description=?, vet_name=?, clinic_name=?, last_checkup_date=?, vaccines_given=?, medical_notes=?';
     if (req.file) {
       query += ', photo=?';
       fields.push(`/uploads/pets/${req.file.filename}`);
