@@ -38,10 +38,15 @@ function TypeBadge({ type }) {
 function SourceBadge({ source }) {
   if (source === 'Admin Post') return (
     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#ede9fe', color: '#6d28d9' }}>
-      ADMIN POST
+      ADMIN
     </span>
   );
-  return null;
+  // Show USER badge for user-submitted reports
+  return (
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#e0f2fe', color: '#0369a1' }}>
+      USER
+    </span>
+  );
 }
 
 // ─── Field (read-only display) ────────────────────────────────────────────────
@@ -55,7 +60,7 @@ function Field({ label, value }) {
 }
 
 // ─── View Detail Modal ────────────────────────────────────────────────────────
-function DetailModal({ report, onClose, onApprove, onDelete, onReunite }) {
+function DetailModal({ report, onClose, onApprove, onDelete, onReunite, onStatusChange }) {
   const isResolved = report.status === 'Reunited' || report.status === 'Closed';
   const isPending  = report.status === 'Pending Review';
   const isApproved = report.status === 'Approved';
@@ -80,7 +85,7 @@ function DetailModal({ report, onClose, onApprove, onDelete, onReunite }) {
         )}
         {report.status === 'Closed' && (
           <div style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#6b7280', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 14 }}>
-            This report has been closed by the reporter.
+            This report has been closed.
           </div>
         )}
 
@@ -93,7 +98,6 @@ function DetailModal({ report, onClose, onApprove, onDelete, onReunite }) {
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, background: '#f9fafb', borderRadius: 10, padding: 20 }}>
-          {/* Report type + pet type row */}
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Report Type</label>
@@ -113,10 +117,27 @@ function DetailModal({ report, onClose, onApprove, onDelete, onReunite }) {
           {report.pet_name && <Field label="Pet Name" value={report.pet_name} />}
           <Field label="Last Seen / Found At"    value={report.last_seen_location} />
           <Field label="Description"             value={report.pet_description} />
+
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Status</label>
             <StatusBadge status={report.status} />
           </div>
+
+          {/* Admin can change status of resolved reports */}
+          {isResolved && (
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Change Status</label>
+              <select
+                defaultValue={report.status}
+                onChange={e => onStatusChange(report.id, e.target.value)}
+                style={{ border: '1.5px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', background: 'white', color: 'var(--text-dark)' }}
+              >
+                <option value="Reunited">🐾 Reunited</option>
+                <option value="Closed">Closed</option>
+                <option value="Approved">Approved (Re-open)</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
@@ -277,11 +298,12 @@ function PendingTable({ reports, onView, onApprove, onDelete }) {
     </div>
   );
   return (
-    <ScrollTable headers={['TYPE', 'PET TYPE', 'Reporter', 'Description', 'Date', '']}>
+    <ScrollTable headers={['TYPE', 'PET TYPE', 'SOURCE', 'Reporter', 'Description', 'Date', '']}>
       {reports.map(r => (
         <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
           <td style={td}><TypeBadge type={r.type} /></td>
           <td style={{ ...td, whiteSpace: 'nowrap', fontSize: 13 }}>{PET_TYPE_ICONS[r.pet_type] || '🐾'} {r.pet_type || '—'}</td>
+          <td style={td}><SourceBadge source={r.source} /></td>
           <td style={td}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={avatarStyle}>{r.reporter_name?.[0]?.toUpperCase() || '?'}</div>
@@ -351,17 +373,18 @@ function ActiveTable({ reports, onView, onApprove, onDelete, onReunite }) {
   );
 }
 
-// ─── Resolved Table ───────────────────────────────────────────────────────────
-function ResolvedTable({ reports, onView, onDelete }) {
+// ─── Resolved Table (kept in admin, editable status) ─────────────────────────
+function ResolvedTable({ reports, onView, onDelete, onStatusChange }) {
   if (reports.length === 0) return (
     <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>No resolved cases yet.</div>
   );
   return (
-    <ScrollTable headers={['TYPE', 'PET TYPE', 'Reporter', 'Description', 'Date Reported', 'Date Resolved', 'STATUS', '']}>
+    <ScrollTable headers={['TYPE', 'PET TYPE', 'SOURCE', 'Reporter', 'Description', 'Date Reported', 'Date Resolved', 'STATUS', 'CHANGE STATUS', '']}>
       {reports.map(r => (
         <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
           <td style={td}><TypeBadge type={r.type} /></td>
           <td style={{ ...td, whiteSpace: 'nowrap', fontSize: 13 }}>{PET_TYPE_ICONS[r.pet_type] || '🐾'} {r.pet_type || '—'}</td>
+          <td style={td}><SourceBadge source={r.source} /></td>
           <td style={td}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={avatarStyle}>{r.reporter_name?.[0]?.toUpperCase() || '?'}</div>
@@ -371,7 +394,7 @@ function ResolvedTable({ reports, onView, onDelete }) {
               </div>
             </div>
           </td>
-          <td style={{ ...td, maxWidth: 180 }}>
+          <td style={{ ...td, maxWidth: 160 }}>
             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, color: 'var(--text-mid)' }}>{r.pet_description}</div>
           </td>
           <td style={{ ...td, whiteSpace: 'nowrap', fontSize: 13 }}>
@@ -381,6 +404,17 @@ function ResolvedTable({ reports, onView, onDelete }) {
             {new Date(r.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </td>
           <td style={td}><StatusBadge status={r.status} /></td>
+          <td style={td}>
+            <select
+              defaultValue={r.status}
+              onChange={e => onStatusChange(r.id, e.target.value)}
+              style={{ border: '1.5px solid var(--border)', borderRadius: 8, padding: '5px 10px', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', background: 'white', color: 'var(--text-dark)' }}
+            >
+              <option value="Reunited">🐾 Reunited</option>
+              <option value="Closed">Closed</option>
+              <option value="Approved">Approved (Re-open)</option>
+            </select>
+          </td>
           <td style={td}>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => onView(r)}      style={actionBtn('#2563eb')}>View</button>
@@ -450,6 +484,16 @@ export default function AdminLostAndFound() {
     if (!window.confirm('Mark this pet as reunited with its owner?')) return;
     try { await API.patch(`/lostfound/${id}/reunite-admin`); fetchReports(); flash('🐾 Marked as Reunited!'); }
     catch { alert('Failed to update.'); }
+  };
+
+  const handleStatusChange = async (id, newStatus) => {
+    if (!window.confirm(`Change status to "${newStatus}"?`)) return;
+    try {
+      await API.patch(`/lostfound/${id}/status`, { status: newStatus });
+      if (viewReport?.id === id) setViewReport(null);
+      fetchReports();
+      flash(`Status updated to "${newStatus}".`);
+    } catch { alert('Failed to update status.'); }
   };
 
   // Buckets
@@ -536,7 +580,7 @@ export default function AdminLostAndFound() {
         />
       </SectionCard>
 
-      {/* ── Reunited & Closed ── */}
+      {/* ── Reunited & Closed (kept in admin, with editable status) ── */}
       <SectionCard
         title="🐾 Reunited & Closed"
         count={reunitedReports.length}
@@ -547,6 +591,7 @@ export default function AdminLostAndFound() {
           reports={reunitedReports}
           onView={setViewReport}
           onDelete={handleDelete}
+          onStatusChange={handleStatusChange}
         />
       </SectionCard>
 
@@ -558,6 +603,7 @@ export default function AdminLostAndFound() {
           onApprove={() => { handleApprove(viewReport.id); setViewReport(null); }}
           onDelete={() => { handleDelete(viewReport.id); setViewReport(null); }}
           onReunite={() => { handleReunite(viewReport.id); setViewReport(null); }}
+          onStatusChange={(id, status) => { handleStatusChange(id, status); }}
         />
       )}
       {showPost && (

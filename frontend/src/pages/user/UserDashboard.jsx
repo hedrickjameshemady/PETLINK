@@ -4,6 +4,9 @@ import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import { API, useAuth } from '../../context/AuthContext';
 
+const PET_TYPES = ['All', 'Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
+const PET_TYPE_ICONS = { Dog: '🐶', Cat: '🐱', Bird: '🐦', Rabbit: '🐰', Others: '🐾', All: '✨' };
+
 function StatusBadge(s) {
   const map = {
     Approved: 'green',
@@ -24,6 +27,10 @@ export default function UserDashboard() {
   const [loading, setLoading] = useState(true);
   const [lfLoading, setLfLoading] = useState({});
 
+  // Lost & Found filters
+  const [lfSearch, setLfSearch] = useState('');
+  const [lfTypeFilter, setLfTypeFilter] = useState('All'); // pet type filter (Dog/Cat/etc)
+
   const fetchAll = () => {
     Promise.all([
       API.get('/adoptions/my').catch(() => ({ data: [] })),
@@ -38,11 +45,25 @@ export default function UserDashboard() {
 
   useEffect(() => { fetchAll(); }, []);
 
-  const handleReunite = async (id) => {
-    if (!window.confirm('Mark this report as Reunited? 🐾 This means your pet has been found or the found pet has been returned to its owner.')) return;
+  const handleStatusChange = async (id, newStatus) => {
+    const confirmMsg =
+      newStatus === 'Reunited'
+        ? 'Mark this report as Reunited? 🐾 This means your pet has been found or the found pet has been returned to its owner.'
+        : newStatus === 'Closed'
+        ? 'Close this report? It will no longer show on the public page.'
+        : `Change status to "${newStatus}"?`;
+    if (!window.confirm(confirmMsg)) return;
     setLfLoading(p => ({ ...p, [id]: true }));
     try {
-      await API.patch(`/lostfound/${id}/reunite`);
+      if (newStatus === 'Reunited') {
+        await API.patch(`/lostfound/${id}/reunite`);
+      } else if (newStatus === 'Closed') {
+        await API.patch(`/lostfound/${id}/close`);
+      } else if (newStatus === 'Approved') {
+        // re-open: user can't directly approve, so just reload
+        alert('Only an admin can approve reports.');
+        return;
+      }
       fetchAll();
     } catch (err) {
       alert(err?.response?.data?.error || 'Could not update. Make sure the report is approved first.');
@@ -51,17 +72,128 @@ export default function UserDashboard() {
     }
   };
 
-  const handleClose = async (id) => {
-    if (!window.confirm('Close this report? It will no longer show on the public page.')) return;
-    setLfLoading(p => ({ ...p, [id]: true }));
-    try {
-      await API.patch(`/lostfound/${id}/close`);
-      fetchAll();
-    } catch (err) {
-      alert(err?.response?.data?.error || 'Could not close report.');
-    } finally {
-      setLfLoading(p => ({ ...p, [id]: false }));
-    }
+  // Filter + split reports
+  const filteredLf = lfReports.filter(r => {
+    const matchesType = lfTypeFilter === 'All' ? true : (r.pet_type || 'Others') === lfTypeFilter;
+    const q = lfSearch.trim().toLowerCase();
+    const matchesSearch = !q ? true :
+      (r.pet_name || '').toLowerCase().includes(q) ||
+      (r.pet_description || '').toLowerCase().includes(q) ||
+      (r.last_seen_location || '').toLowerCase().includes(q);
+    return matchesType && matchesSearch;
+  });
+
+  // Separate lost and found (exclude reunited from main display — keep editable in their own section below)
+  const lostReports = filteredLf.filter(r => r.type === 'Lost' && r.status !== 'Reunited' && r.status !== 'Closed');
+  const foundReports = filteredLf.filter(r => r.type === 'Found' && r.status !== 'Reunited' && r.status !== 'Closed');
+  const resolvedReports = filteredLf.filter(r => r.status === 'Reunited' || r.status === 'Closed');
+
+  // Group by pet_type within each report type
+  const groupByPetType = (reports) => {
+    const grouped = reports.reduce((acc, r) => {
+      const key = r.pet_type || 'Others';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(r);
+      return acc;
+    }, {});
+    const order = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
+    return Object.keys(grouped).sort((a, b) => order.indexOf(a) - order.indexOf(b)).map(k => ({ type: k, items: grouped[k] }));
+  };
+
+  const lostGroups = groupByPetType(lostReports);
+  const foundGroups = groupByPetType(foundReports);
+
+  const ReportTable = ({ reports }) => (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>PET NAME</th>
+            <th>DESCRIPTION</th>
+            <th>LOCATION</th>
+            <th>DATE REPORTED</th>
+            <th>STATUS</th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {reports.map(r => (
+            <tr key={r.id}>
+              <td style={{ fontWeight: 600 }}>{r.pet_name || '—'}</td>
+              <td style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 180 }}>
+                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.pet_description}
+                </div>
+              </td>
+              <td style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 140 }}>
+                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.last_seen_location || '—'}
+                </div>
+              </td>
+              <td style={{ whiteSpace: 'nowrap', fontSize: 13 }}>
+                {new Date(r.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+              </td>
+              <td>{StatusBadge(r.status)}</td>
+              <td>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'nowrap' }}>
+                  <button
+                    disabled={lfLoading[r.id] || r.status === 'Pending Review'}
+                    onClick={() => handleStatusChange(r.id, 'Reunited')}
+                    title={r.status === 'Pending Review' ? 'Must be approved first' : 'Mark as reunited'}
+                    style={{
+                      background: r.status === 'Pending Review' ? '#e5e7eb' : '#166534',
+                      color: r.status === 'Pending Review' ? '#9ca3af' : 'white',
+                      border: 'none', borderRadius: 20,
+                      padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                      cursor: r.status === 'Pending Review' ? 'not-allowed' : 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    🐾 Reunited
+                  </button>
+                  <button
+                    disabled={lfLoading[r.id]}
+                    onClick={() => handleStatusChange(r.id, 'Closed')}
+                    style={{
+                      background: 'none', border: '1.5px solid #d1d5db',
+                      color: '#6b7280', borderRadius: 20,
+                      padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const SectionGroup = ({ groups, emptyMsg }) => {
+    if (groups.length === 0) return (
+      <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 14 }}>
+        {emptyMsg}
+      </div>
+    );
+    return (
+      <>
+        {groups.map(g => (
+          <div key={g.type} style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, borderBottom: '1.5px solid var(--green-100)', paddingBottom: 8 }}>
+              <span style={{ fontSize: 18 }}>{PET_TYPE_ICONS[g.type] || '🐾'}</span>
+              <span style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 15, color: 'var(--text-dark)' }}>{g.type}s</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--green-50)', border: '1px solid var(--green-200)', borderRadius: 20, padding: '1px 8px', fontWeight: 500 }}>
+                {g.items.length}
+              </span>
+            </div>
+            <ReportTable reports={g.items} />
+          </div>
+        ))}
+      </>
+    );
   };
 
   return (
@@ -122,40 +254,18 @@ export default function UserDashboard() {
                   {applications.map(app => (
                     <tr key={app.id}>
                       <td>
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-    {app.pet_photo ? (
-      <img
-        src={app.pet_photo}
-        alt={app.pet_name}
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 8,
-          objectFit: 'cover',
-          border: '1.5px solid var(--border)',
-          flexShrink: 0,
-        }}
-      />
-    ) : (
-      <div style={{
-        width: 44,
-        height: 44,
-        borderRadius: 8,
-        background: 'var(--green-50)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 22,
-        flexShrink: 0,
-        border: '1.5px solid var(--border)',
-      }}>🐾</div>
-    )}
-    <div>
-      <div style={{ fontWeight: 600 }}>{app.pet_name}</div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{app.pet_breed} • {app.pet_type}</div>
-    </div>
-  </div>
-</td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {app.pet_photo ? (
+                            <img src={app.pet_photo} alt={app.pet_name} style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', border: '1.5px solid var(--border)', flexShrink: 0 }} />
+                          ) : (
+                            <div style={{ width: 44, height: 44, borderRadius: 8, background: 'var(--green-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, border: '1.5px solid var(--border)' }}>🐾</div>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{app.pet_name}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{app.pet_breed} • {app.pet_type}</div>
+                          </div>
+                        </div>
+                      </td>
                       <td>{new Date(app.applied_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
                       <td>{StatusBadge(app.status)}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 240 }}>{app.review_notes || '—'}</td>
@@ -167,7 +277,7 @@ export default function UserDashboard() {
           )}
         </div>
 
-        {/* My Lost & Found Reports */}
+        {/* ── My Lost & Found Reports ── */}
         <div className="card" style={{ marginTop: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ fontWeight: 700, fontSize: 16 }}>My Lost &amp; Found Reports</h2>
@@ -184,90 +294,147 @@ export default function UserDashboard() {
               <Link to="/lost-and-found" className="btn btn-primary" style={{ marginTop: 16 }}>Go to Lost &amp; Found</Link>
             </div>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>TYPE</th>
-                    <th>PET NAME</th>
-                    <th>DESCRIPTION</th>
-                    <th>DATE REPORTED</th>
-                    <th>STATUS</th>
-                    <th>ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lfReports.map(r => (
-                    <tr key={r.id}>
-                      <td>
-                        <span style={{
-                          display: 'inline-block', padding: '3px 10px', borderRadius: 4,
-                          fontSize: 11, fontWeight: 700,
-                          background: r.type === 'Lost' ? '#fee2e2' : '#dcfce7',
-                          color: r.type === 'Lost' ? '#991b1b' : '#15803d',
-                        }}>
-                          {r.type.toUpperCase()}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 600 }}>{r.pet_name || '—'}</td>
-                      <td style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 200 }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.pet_description}
-                        </div>
-                      </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        {new Date(r.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                      </td>
-                      <td>
-                        {r.status === 'Reunited'
-                          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: '#dcfce7', color: '#15803d', fontSize: 12, fontWeight: 700 }}>🐾 Reunited</span>
-                          : r.status === 'Closed'
-                          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: '#f3f4f6', color: '#6b7280', fontSize: 12, fontWeight: 600 }}>Closed</span>
-                          : StatusBadge(r.status)
-                        }
-                      </td>
-                      <td>
-                        {/* Only show action buttons if not already resolved/closed */}
-                        {(r.status !== 'Reunited' && r.status !== 'Closed') && (
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'nowrap' }}>
-                            <button
-                              disabled={lfLoading[r.id] || r.status === 'Pending Review'}
-                              onClick={() => handleReunite(r.id)}
-                              title={r.status === 'Pending Review' ? 'Must be approved first' : 'Mark as reunited'}
-                              style={{
-                                background: r.status === 'Pending Review' ? '#e5e7eb' : '#166534',
-                                color: r.status === 'Pending Review' ? '#9ca3af' : 'white',
-                                border: 'none', borderRadius: 20,
-                                padding: '5px 12px', fontSize: 12, fontWeight: 600,
-                                cursor: r.status === 'Pending Review' ? 'not-allowed' : 'pointer',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              🐾 Reunited
-                            </button>
-                            <button
-                              disabled={lfLoading[r.id]}
-                              onClick={() => handleClose(r.id)}
-                              style={{
-                                background: 'none', border: '1.5px solid #d1d5db',
-                                color: '#6b7280', borderRadius: 20,
-                                padding: '5px 12px', fontSize: 12, fontWeight: 600,
-                                cursor: 'pointer', whiteSpace: 'nowrap',
-                              }}
-                            >
-                              Close
-                            </button>
-                          </div>
-                        )}
-                        {(r.status === 'Reunited' || r.status === 'Closed') && (
-                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
-                        )}
-                      </td>
-                    </tr>
+            <>
+              {/* Filters */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                {/* Search */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)', padding: '8px 16px', maxWidth: 380, background: 'white' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search by name, description or location…"
+                    value={lfSearch}
+                    onChange={e => setLfSearch(e.target.value)}
+                    style={{ border: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 13, flex: 1, color: 'var(--text-dark)', background: 'transparent' }}
+                  />
+                </div>
+                {/* Pet type tabs */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {PET_TYPES.map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setLfTypeFilter(type)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 'var(--radius-full)', fontSize: 12, fontWeight: 500,
+                        border: '1.5px solid', cursor: 'pointer', transition: 'all 0.15s',
+                        borderColor: lfTypeFilter === type ? 'var(--primary)' : 'var(--border)',
+                        background: lfTypeFilter === type ? 'var(--primary)' : 'white',
+                        color: lfTypeFilter === type ? 'white' : 'var(--text-mid)',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {PET_TYPE_ICONS[type]} {type}
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+
+              {filteredLf.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 14 }}>
+                  No reports match your filter.
+                </div>
+              ) : (
+                <>
+                  {/* ── Lost Pets ── */}
+                  {(lostGroups.length > 0 || lostReports.length === 0) && (
+                    <div style={{ marginBottom: 28 }}>
+                      <div style={styles.reportSectionHeader}>
+                        <span style={{ ...styles.reportTypeBadge, background: '#fee2e2', color: '#991b1b' }}>LOST</span>
+                        <span style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 16 }}>Lost Pets</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 20, padding: '1px 9px', fontWeight: 500 }}>
+                          {lostReports.length}
+                        </span>
+                      </div>
+                      <SectionGroup groups={lostGroups} emptyMsg="No lost pet reports match your filter." />
+                    </div>
+                  )}
+
+                  {/* ── Found Pets ── */}
+                  {(foundGroups.length > 0 || foundReports.length === 0) && (
+                    <div style={{ marginBottom: 28 }}>
+                      <div style={styles.reportSectionHeader}>
+                        <span style={{ ...styles.reportTypeBadge, background: '#dcfce7', color: '#15803d' }}>FOUND</span>
+                        <span style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 16 }}>Found Pets</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 20, padding: '1px 9px', fontWeight: 500 }}>
+                          {foundReports.length}
+                        </span>
+                      </div>
+                      <SectionGroup groups={foundGroups} emptyMsg="No found pet reports match your filter." />
+                    </div>
+                  )}
+
+                  {/* ── Resolved (Reunited / Closed) — editable status ── */}
+                  {resolvedReports.length > 0 && (
+                    <div>
+                      <div style={styles.reportSectionHeader}>
+                        <span style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 16 }}>🐾 Reunited &amp; Closed</span>
+                        <span style={{ fontSize: 12, color: '#15803d', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 20, padding: '1px 9px', fontWeight: 500 }}>
+                          {resolvedReports.length}
+                        </span>
+                      </div>
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>TYPE</th>
+                              <th>PET TYPE</th>
+                              <th>PET NAME</th>
+                              <th>DATE REPORTED</th>
+                              <th>STATUS</th>
+                              <th>CHANGE STATUS</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {resolvedReports.map(r => (
+                              <tr key={r.id}>
+                                <td>
+                                  <span style={{
+                                    display: 'inline-block', padding: '3px 10px', borderRadius: 4,
+                                    fontSize: 11, fontWeight: 700,
+                                    background: r.type === 'Lost' ? '#fee2e2' : '#dcfce7',
+                                    color: r.type === 'Lost' ? '#991b1b' : '#15803d',
+                                  }}>
+                                    {r.type.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td style={{ fontSize: 13 }}>{PET_TYPE_ICONS[r.pet_type] || '🐾'} {r.pet_type || '—'}</td>
+                                <td style={{ fontWeight: 600 }}>{r.pet_name || '—'}</td>
+                                <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                                  {new Date(r.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </td>
+                                <td>
+                                  {r.status === 'Reunited'
+                                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: '#dcfce7', color: '#15803d', fontSize: 12, fontWeight: 700 }}>🐾 Reunited</span>
+                                    : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: '#f3f4f6', color: '#6b7280', fontSize: 12, fontWeight: 600 }}>Closed</span>
+                                  }
+                                </td>
+                                <td>
+                                  <select
+                                    disabled={lfLoading[r.id]}
+                                    value={r.status}
+                                    onChange={e => handleStatusChange(r.id, e.target.value)}
+                                    style={{
+                                      border: '1.5px solid var(--border)', borderRadius: 8,
+                                      padding: '5px 10px', fontSize: 12, fontFamily: 'inherit',
+                                      cursor: 'pointer', background: 'white', color: 'var(--text-dark)',
+                                    }}
+                                  >
+                                    <option value="Reunited">🐾 Reunited</option>
+                                    <option value="Closed">Closed</option>
+                                  </select>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           )}
         </div>
 
@@ -335,4 +502,6 @@ const styles = {
   statIcon: { width: 48, height: 48, background: 'var(--green-50)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 },
   quickLinks: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginTop: 20 },
   quickCard: { background: 'white', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px 18px', textDecoration: 'none', color: 'var(--text-dark)', display: 'block', transition: 'border-color 0.2s' },
+  reportSectionHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid var(--green-100)' },
+  reportTypeBadge: { display: 'inline-block', padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700 },
 };

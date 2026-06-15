@@ -101,20 +101,6 @@ router.get('/my', authMiddleware, async (req, res) => {
   }
 });
 
-// ─── Get single report by ID ─────────────────────────────────────────────────
-router.get('/:id', async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      `SELECT * FROM lost_found_reports WHERE id = ?`,
-      [req.params.id]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Report not found' });
-    res.json(rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ─── USER: Submit a report ───────────────────────────────────────────────────
 router.post('/', upload.single('photo'), async (req, res) => {
   try {
@@ -200,6 +186,22 @@ router.patch('/:id/approve', authMiddleware, adminMiddleware, async (req, res) =
   }
 });
 
+// ─── ADMIN: Set any status on a report ───────────────────────────────────────
+router.patch('/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ['Pending Review', 'Approved', 'Rejected', 'Reunited', 'Closed'];
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status value.' });
+    await db.query(
+      `UPDATE lost_found_reports SET status = ?, reviewed_by = ?, updated_at = NOW() WHERE id = ?`,
+      [status, req.user.id, req.params.id]
+    );
+    res.json({ message: `Status updated to ${status}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── ADMIN: Mark as Reunited ─────────────────────────────────────────────────
 router.patch('/:id/reunite-admin', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -232,7 +234,7 @@ router.patch('/:id/reunite', authMiddleware, async (req, res) => {
   }
 });
 
-// ─── USER: Close/cancel own report ───────────────────────────────────────────
+// ─── USER: Close own report ───────────────────────────────────────────────────
 router.patch('/:id/close', authMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -245,6 +247,45 @@ router.patch('/:id/close', authMiddleware, async (req, res) => {
       [req.params.id]
     );
     res.json({ message: 'Report closed.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── USER: Update status of own resolved report (Reunited <-> Closed) ────────
+// IMPORTANT: must be defined BEFORE the /:id GET route
+router.patch('/:id/update-status', authMiddleware, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ['Reunited', 'Closed'];
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+
+    const [rows] = await db.query(
+      `SELECT * FROM lost_found_reports WHERE id = ? AND user_id = ?`,
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(403).json({ error: 'Not authorized or report not found.' });
+
+    await db.query(
+      `UPDATE lost_found_reports SET status = ?, updated_at = NOW() WHERE id = ?`,
+      [status, req.params.id]
+    );
+    res.json({ message: `Status updated to ${status}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Get single report by ID ─────────────────────────────────────────────────
+// NOTE: this wildcard must stay AFTER all specific /:id/action routes
+router.get('/:id', async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT * FROM lost_found_reports WHERE id = ?`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Report not found' });
+    res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
