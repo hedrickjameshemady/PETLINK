@@ -10,6 +10,9 @@ import greenRect from '../assets/Rectangle 477.png';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+const PET_TYPES = ['All', 'Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
+const PET_TYPE_ICONS = { All: '✨', Dog: '🐶', Cat: '🐱', Bird: '🐦', Rabbit: '🐰', Others: '🐾' };
+
 // ─── Type/Status badge on card ────────────────────────────────────────────────
 function CardBadge({ type, status }) {
   if (status === 'Reunited') {
@@ -43,6 +46,7 @@ function ReportModal({ defaultType, onClose, onSuccess }) {
     email:      user?.email      || '',
     phone:      user?.phone      || '',
     type: defaultType || 'Lost',
+    pet_type: 'Dog',
     pet_name: '',
     pet_description: '',
     last_seen_location: '',
@@ -63,20 +67,23 @@ function ReportModal({ defaultType, onClose, onSuccess }) {
     setError('');
     try {
       const fd = new FormData();
-      fd.append('reporter_name',       `${form.first_name} ${form.last_name}`);
-      fd.append('reporter_email',      form.email);
-      fd.append('reporter_phone',      form.phone);
-      fd.append('type',                form.type);
-      fd.append('pet_name',            form.pet_name);
-      fd.append('pet_description',     form.pet_description);
-      fd.append('last_seen_location',  form.last_seen_location);
+      fd.append('reporter_name',      `${form.first_name} ${form.last_name}`);
+      fd.append('reporter_email',     form.email);
+      fd.append('reporter_phone',     form.phone);
+      fd.append('type',               form.type);
+      fd.append('pet_type',           form.pet_type);
+      fd.append('pet_name',           form.pet_name);
+      fd.append('pet_description',    form.pet_description);
+      fd.append('last_seen_location', form.last_seen_location);
       if (user?.id) fd.append('user_id', user.id);
-      if (photo)    fd.append('photo',   photo);
+      if (photo)    fd.append('photo', photo);
 
-      await fetch(`${API_BASE}/api/lostfound`, { method: 'POST', body: fd });
+      await API.post('/lostfound', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       onSuccess();
-    } catch {
-      setError('Submission failed. Please try again.');
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Submission failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -115,6 +122,28 @@ function ReportModal({ defaultType, onClose, onSuccess }) {
               <input type="radio" name="type" value={t} checked={form.type === t} onChange={() => set('type', t)} />
               {t} Pet
             </label>
+          ))}
+        </div>
+
+        <label style={lbl}>Type of Pet <span style={{ color: '#ef4444' }}>*</span></label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          {['Dog', 'Cat', 'Bird', 'Rabbit', 'Others'].map(pt => (
+            <button
+              key={pt}
+              type="button"
+              onClick={() => set('pet_type', pt)}
+              style={{
+                padding: '7px 16px', borderRadius: 'var(--radius-full)', fontSize: 13,
+                fontWeight: form.pet_type === pt ? 600 : 500,
+                border: '1.5px solid',
+                borderColor: form.pet_type === pt ? 'var(--primary)' : 'var(--border)',
+                background: form.pet_type === pt ? 'var(--primary)' : 'white',
+                color: form.pet_type === pt ? 'white' : 'var(--text-mid)',
+                cursor: 'pointer',
+              }}
+            >
+              {PET_TYPE_ICONS[pt]} {pt}
+            </button>
           ))}
         </div>
 
@@ -191,6 +220,7 @@ function DetailModal({ report, onClose }) {
           <Field label="Reporter"             value={report.reporter_name} />
           <Field label="Email"                value={report.reporter_email} />
           <Field label="Phone"                value={report.reporter_phone || '—'} />
+          {report.pet_type && <Field label="Pet Type" value={report.pet_type} />}
           {report.pet_name && <Field label="Pet Name" value={report.pet_name} />}
           <Field label="Last Seen / Found At" value={report.last_seen_location || '—'} />
           <Field label="Description"          value={report.pet_description} />
@@ -271,24 +301,25 @@ export default function LostAndFound() {
   const { user } = useAuth();
   const [reports,    setReports]    = useState([]);
   const [loading,    setLoading]    = useState(true);
-  const [filter,     setFilter]     = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [petTypeFilter, setPetTypeFilter] = useState('All');
   const [search,     setSearch]     = useState('');
   const [modal,      setModal]      = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
 
-
   const fetchReports = () => {
     setLoading(true);
     let url = '/lostfound?';
-    if (filter !== 'All') url += `type=${filter}&`;
-    if (search)           url += `search=${encodeURIComponent(search)}&`;
+    if (statusFilter !== 'All') url += `type=${statusFilter}&`;
+    if (petTypeFilter !== 'All') url += `pet_type=${encodeURIComponent(petTypeFilter)}&`;
+    if (search)                  url += `search=${encodeURIComponent(search)}&`;
     API.get(url)
       .then(r => setReports(r.data))
       .catch(() => setReports([]))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchReports(); }, [filter, search]);
+  useEffect(() => { fetchReports(); }, [statusFilter, petTypeFilter, search]);
 
   const handleReportSuccess = () => {
     setModal(null);
@@ -305,12 +336,10 @@ export default function LostAndFound() {
 
       <main style={{ flex: 1 }}>
 
-        {/* ── Hero section: white page, centred green card ── */}
+        {/* ── Hero section ── */}
         <div style={{ padding: '32px 24px', background: '#fff' }}>
           <div style={{ maxWidth: 1100, margin: '0 auto' }}>
             <div style={heroCard}>
-
-              {/* Paw-prints overlay */}
               <img
                 src={pawsBg}
                 alt=""
@@ -321,13 +350,10 @@ export default function LostAndFound() {
                   pointerEvents: 'none', borderRadius: 16,
                 }}
               />
-
-              {/* Left: text + buttons */}
               <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
                 <h1 style={{
                   fontFamily: "'Fraunces',serif", fontWeight: 800,
-                  fontSize: 34, marginBottom: 8,
-                  color: '#1a2e1a',
+                  fontSize: 34, marginBottom: 8, color: '#1a2e1a',
                 }}>
                   Lost &amp; Found Pets
                 </h1>
@@ -339,21 +365,17 @@ export default function LostAndFound() {
                 </p>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <button style={btnHeroFill}    onClick={() => { if (!user) { navigate('/login'); return; } setModal('lost'); }}>🤍 Report a lost pet</button>
-<button style={btnHeroOutline} onClick={() => { if (!user) { navigate('/login'); return; } setModal('found'); }}>🤍 Report a found pet</button>
+                  <button style={btnHeroOutline} onClick={() => { if (!user) { navigate('/login'); return; } setModal('found'); }}>🤍 Report a found pet</button>
                 </div>
               </div>
-
-              {/* Right: corgi + cat */}
               <div style={{
                 flexShrink: 0, display: 'flex',
                 alignItems: 'flex-end',
-                position: 'relative', zIndex: 1,
-                height: 200,
+                position: 'relative', zIndex: 1, height: 200,
               }}>
                 <img src={corgiImg} alt="corgi" style={{ height: 200, objectFit: 'contain', position: 'relative', zIndex: 2 }} />
                 <img src={catImg}   alt="cat"   style={{ height: 168, objectFit: 'contain', marginLeft: -24, position: 'relative', zIndex: 1 }} />
               </div>
-
             </div>
           </div>
         </div>
@@ -369,8 +391,8 @@ export default function LostAndFound() {
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 40px' }}>
           <div style={{ background: 'white', borderRadius: 14, border: '1.5px solid var(--border)', padding: '20px 24px' }}>
 
-            {/* Search + Filter */}
-            <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+            {/* Search + Status Filter */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)',
@@ -385,8 +407,8 @@ export default function LostAndFound() {
                 />
               </div>
               <select
-                value={filter}
-                onChange={e => setFilter(e.target.value)}
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
                 style={{
                   border: '1.5px solid var(--border)', borderRadius: 'var(--radius-full)',
                   padding: '8px 20px', fontFamily: 'inherit', fontSize: 14,
@@ -397,6 +419,31 @@ export default function LostAndFound() {
                 <option value="Lost">Lost</option>
                 <option value="Found">Found</option>
               </select>
+            </div>
+
+            {/* Pet Type Filter — horizontal scrollable tabs */}
+            <div style={{
+              display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 20,
+              scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent',
+            }}>
+              {PET_TYPES.map(pt => (
+                <button
+                  key={pt}
+                  onClick={() => setPetTypeFilter(pt)}
+                  style={{
+                    flexShrink: 0,
+                    padding: '8px 18px', borderRadius: 'var(--radius-full)', fontSize: 13,
+                    fontWeight: petTypeFilter === pt ? 600 : 500,
+                    border: '1.5px solid',
+                    borderColor: petTypeFilter === pt ? 'var(--primary)' : 'var(--border)',
+                    background: petTypeFilter === pt ? 'var(--primary)' : 'white',
+                    color: petTypeFilter === pt ? 'white' : 'var(--text-mid)',
+                    cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {PET_TYPE_ICONS[pt]} {pt}
+                </button>
+              ))}
             </div>
 
             {loading ? (
@@ -494,16 +541,10 @@ const btnPrimary = {
 };
 const heroCard = {
   backgroundImage: `url(${greenRect})`,
-  backgroundSize: 'cover',
-  backgroundPosition: 'center',
-  borderRadius: 16,
-  padding: '40px 48px',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: 24,
-  position: 'relative',
-  overflow: 'hidden',
+  backgroundSize: 'cover', backgroundPosition: 'center',
+  borderRadius: 16, padding: '40px 48px',
+  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  gap: 24, position: 'relative', overflow: 'hidden',
 };
 const btnHeroFill = {
   background: '#1a2e1a', color: 'white', border: 'none',

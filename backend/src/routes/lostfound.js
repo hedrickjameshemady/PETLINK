@@ -7,7 +7,7 @@ const fs = require('fs');
 
 const router = express.Router();
 
-// Multer setup for photo uploads
+// Multer setup
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, '../uploads/lostfound');
@@ -23,7 +23,7 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 // ─── PUBLIC: Get all approved/reunited reports ───────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const { type, status, search } = req.query;
+    const { type, status, search, pet_type } = req.query;
     let query = `SELECT * FROM lost_found_reports WHERE 1=1`;
     const params = [];
 
@@ -37,6 +37,11 @@ router.get('/', async (req, res) => {
     if (type && type !== 'All') {
       query += ` AND type = ?`;
       params.push(type);
+    }
+
+    if (pet_type && pet_type !== 'All') {
+      query += ` AND pet_type = ?`;
+      params.push(pet_type);
     }
 
     if (search) {
@@ -110,41 +115,73 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// ─── Submit a report ─────────────────────────────────────────────────────────
+// ─── USER: Submit a report ───────────────────────────────────────────────────
 router.post('/', upload.single('photo'), async (req, res) => {
   try {
     const {
       reporter_name, reporter_email, reporter_phone,
-      type, pet_name, pet_description, last_seen_location,
+      type, pet_type, pet_name, pet_description, last_seen_location,
       user_id,
     } = req.body;
 
-    const [countRows] = await db.query('SELECT COUNT(*) as cnt FROM lost_found_reports');
-    const reportId = `LF${String(countRows[0].cnt + 1).padStart(3, '0')}`;
+    const [maxRows] = await db.query('SELECT MAX(id) as maxId FROM lost_found_reports');
+    const nextNum = (maxRows[0].maxId || 0) + 1;
+    const reportId = `LF${String(nextNum).padStart(3, '0')}`;
 
-    const photo = req.file
-      ? `/uploads/lostfound/${req.file.filename}`
-      : null;
+    const photo = req.file ? `/uploads/lostfound/${req.file.filename}` : null;
 
-    const [result] = await db.query(
+    await db.query(
       `INSERT INTO lost_found_reports
         (report_id, user_id, reporter_name, reporter_email, reporter_phone,
-         type, pet_name, pet_description, photo, last_seen_location)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+         type, pet_type, pet_name, pet_description, photo, last_seen_location, source)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
-        reportId,
-        user_id || null,
+        reportId, user_id || null,
         reporter_name, reporter_email, reporter_phone,
-        type, pet_name || null, pet_description, photo,
-        last_seen_location || null,
+        type, pet_type || null, pet_name || null,
+        pet_description, photo, last_seen_location || null,
+        'User Report',
       ]
     );
 
-    res.status(201).json({
-      id: result.insertId,
-      report_id: reportId,
-      message: 'Report submitted successfully. It will be visible once approved.',
-    });
+    res.status(201).json({ report_id: reportId, message: 'Report submitted successfully. It will be visible once approved.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── ADMIN: Post a surrendered pet directly ──────────────────────────────────
+router.post('/admin/post', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
+  try {
+    const {
+      type, pet_type, pet_name, pet_description, last_seen_location,
+      contact_name, contact_email, contact_phone,
+    } = req.body;
+
+    const [maxRows] = await db.query('SELECT MAX(id) as maxId FROM lost_found_reports');
+    const nextNum = (maxRows[0].maxId || 0) + 1;
+    const reportId = `LF${String(nextNum).padStart(3, '0')}`;
+
+    const photo = req.file ? `/uploads/lostfound/${req.file.filename}` : null;
+
+    await db.query(
+      `INSERT INTO lost_found_reports
+        (report_id, user_id, reporter_name, reporter_email, reporter_phone,
+         type, pet_type, pet_name, pet_description, photo, last_seen_location, status, source)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        reportId, null,
+        contact_name || 'PETLINK Admin',
+        contact_email || '',
+        contact_phone || null,
+        type, pet_type || null, pet_name || null,
+        pet_description, photo, last_seen_location || null,
+        'Approved',
+        'Admin Post',
+      ]
+    );
+
+    res.status(201).json({ report_id: reportId, message: 'Pet posted successfully.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -163,19 +200,28 @@ router.patch('/:id/approve', authMiddleware, adminMiddleware, async (req, res) =
   }
 });
 
-// ─── USER: Mark own report as Reunited (case resolved) ───────────────────────
+// ─── ADMIN: Mark as Reunited ─────────────────────────────────────────────────
+router.patch('/:id/reunite-admin', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await db.query(
+      `UPDATE lost_found_reports SET status = 'Reunited', updated_at = NOW() WHERE id = ?`,
+      [req.params.id]
+    );
+    res.json({ message: 'Marked as Reunited' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── USER: Mark own report as Reunited ───────────────────────────────────────
 router.patch('/:id/reunite', authMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query(
       `SELECT * FROM lost_found_reports WHERE id = ? AND user_id = ?`,
       [req.params.id, req.user.id]
     );
-    if (!rows.length) {
-      return res.status(403).json({ error: 'Not authorized or report not found.' });
-    }
-    if (rows[0].status === 'Pending Review') {
-      return res.status(400).json({ error: 'Report must be approved before marking as reunited.' });
-    }
+    if (!rows.length) return res.status(403).json({ error: 'Not authorized or report not found.' });
+    if (rows[0].status === 'Pending Review') return res.status(400).json({ error: 'Report must be approved before marking as reunited.' });
     await db.query(
       `UPDATE lost_found_reports SET status = 'Reunited', updated_at = NOW() WHERE id = ?`,
       [req.params.id]
@@ -193,9 +239,7 @@ router.patch('/:id/close', authMiddleware, async (req, res) => {
       `SELECT * FROM lost_found_reports WHERE id = ? AND user_id = ?`,
       [req.params.id, req.user.id]
     );
-    if (!rows.length) {
-      return res.status(403).json({ error: 'Not authorized or report not found.' });
-    }
+    if (!rows.length) return res.status(403).json({ error: 'Not authorized or report not found.' });
     await db.query(
       `UPDATE lost_found_reports SET status = 'Closed', updated_at = NOW() WHERE id = ?`,
       [req.params.id]
