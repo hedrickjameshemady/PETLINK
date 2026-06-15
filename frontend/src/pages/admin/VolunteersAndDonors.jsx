@@ -1,28 +1,38 @@
 import { useState, useEffect } from 'react';
 import { API } from '../../context/AuthContext';
 
+// Use your actual uploaded image paths — adjust if your assets folder differs
+import fundRaisingIcon from '../../assets/fund-raising 1.png';
+import bloodDonationIcon from '../../assets/blood-donation 1.png';
+import volunteeringIcon from '../../assets/volunteering 2.png';
+import animalCareIcon from '../../assets/animal-care 1.png';
+
 export default function VolunteersAndDonors() {
-  // ✅ Start empty — no demo data pre-filling the tables
-  const [volunteers, setVolunteers] = useState([]);
-  const [volApps, setVolApps] = useState([]);
-  const [donations, setDonations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddVol, setShowAddVol] = useState(false);
-  const [viewVol, setViewVol] = useState(null);
-  const [editVol, setEditVol] = useState(null);
-  const [editVolForm, setEditVolForm] = useState({});
-  const [viewVolApp, setViewVolApp] = useState(null);
-  const [toast, setToast] = useState('');
-  const [volForm, setVolForm] = useState({ name: '', email: '', phone: '', availability: 'Weekdays', role: '', status: 'Active' });
+  const [volunteers, setVolunteers]   = useState([]);
+  const [volApps,    setVolApps]      = useState([]);
+  const [donations,  setDonations]    = useState([]);
+  const [loading,    setLoading]      = useState(true);
+  const [showAddVol, setShowAddVol]   = useState(false);
+  const [viewVol,    setViewVol]      = useState(null);
+  const [editVol,    setEditVol]      = useState(null);
+  const [editVolForm,setEditVolForm]  = useState({});
+  const [viewVolApp, setViewVolApp]   = useState(null);
+  const [toast,      setToast]        = useState('');
+  const [volFilter,  setVolFilter]    = useState('');
+  const [appFilter,  setAppFilter]    = useState('');
+  const [donFilter,  setDonFilter]    = useState('');
+  const [volForm, setVolForm] = useState({
+    name: '', email: '', phone: '', availability: 'Weekdays', role: '', status: 'Active',
+  });
 
-  // ✅ Real stats from the API
-  const [stats, setStats] = useState([
-    { label: 'Total Volunteers', value: '—', sub: '', icon: '🙋', color: '#e8f5e9' },
-    { label: 'Active this month', value: '—', sub: '', icon: '🤜', color: '#e3f2fd' },
-    { label: 'Total Donors', value: '—', sub: '', icon: '💝', color: '#fce4ec' },
-    { label: 'Fund Raised', value: '—', sub: '', icon: '💰', color: '#fff3e0' },
-  ]);
+  const [stats, setStats] = useState({
+    totalVolunteers:  { value: '—', weekDelta: null },
+    activeThisMonth:  { value: '—', label: '' },
+    totalDonors:      { value: '—', weekDelta: null },
+    fundRaised:       { value: '—', weekPct: null },
+  });
 
+  /* ─── FETCH ─── */
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -34,54 +44,60 @@ export default function VolunteersAndDonors() {
       if (v) setVolunteers(v.data);
       if (a) setVolApps(a.data);
       if (d) setDonations(d.data);
-      // ✅ Map real stats from DB into the cards
       if (s) {
         const { volunteers: vs, donations: ds } = s.data;
-        setStats([
-          { label: 'Total Volunteers', value: vs.total ?? 0, sub: '', icon: '🙋', color: '#e8f5e9' },
-          { label: 'Active Volunteers', value: vs.active ?? 0, sub: 'Currently active', icon: '🤜', color: '#e3f2fd' },
-          { label: 'Total Donors', value: ds.total_donors ?? 0, sub: '', icon: '💝', color: '#fce4ec' },
-          { label: 'Fund Raised', value: `₱${Number(ds.raised ?? 0).toLocaleString()}`, sub: '', icon: '💰', color: '#fff3e0' },
-        ]);
+        setStats({
+          totalVolunteers: {
+            value:     vs.total ?? 0,
+            weekDelta: vs.added_this_week ?? null,
+          },
+          activeThisMonth: {
+            value: vs.active ?? 0,
+            label: 'This week',
+          },
+          totalDonors: {
+            value:     ds.total_donors ?? 0,
+            weekDelta: ds.added_this_week ?? null,
+          },
+          fundRaised: {
+            value:   `₱${Number(ds.raised ?? 0).toLocaleString()}`,
+            weekPct: ds.week_percent ?? null,
+          },
+        });
       }
     }).finally(() => setLoading(false));
   }, []);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
-
-const handleVolStatus = async (id, status) => {
-  try {
-    await API.patch(`/volunteers/applications/${id}/status`, { status });
-    if (status === 'Approved') {
-      const { data } = await API.get('/volunteers');
-      setVolunteers(data);
-    }
-  } catch { /* demo */ }
-  setVolApps(prev => prev.map(a => a.id === id ? { ...a, status } : a));
-  showToast(`Application ${status}`);
-};
+  /* ─── ACTIONS ─── */
+  const handleVolStatus = async (id, status) => {
+    try {
+      await API.patch(`/volunteers/applications/${id}/status`, { status });
+      if (status === 'Approved') {
+        const { data } = await API.get('/volunteers');
+        setVolunteers(data);
+      }
+    } catch { /* demo */ }
+    setVolApps(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    showToast(`Application ${status}`);
+  };
 
   const handleEditVol = async (e) => {
     e.preventDefault();
-    try {
-      await API.put(`/volunteers/${editVol.id}`, editVolForm);
-      showToast('Volunteer updated!');
-    } catch { /* demo */ }
+    try { await API.put(`/volunteers/${editVol.id}`, editVolForm); showToast('Volunteer updated!'); }
+    catch { /* demo */ }
     setVolunteers(prev => prev.map(v => v.id === editVol.id ? { ...v, ...editVolForm } : v));
     setEditVol(null);
   };
 
   const handleDeleteVol = async (vol) => {
     if (!window.confirm(`Remove ${vol.name} from volunteers?`)) return;
-    try {
-      await API.delete(`/volunteers/${vol.id}`);
-    } catch { /* demo */ }
+    try { await API.delete(`/volunteers/${vol.id}`); } catch { /* demo */ }
     setVolunteers(prev => prev.filter(v => v.id !== vol.id));
     showToast('Volunteer removed.');
   };
 
-  // ✅ Add volunteer now saves to DB via POST /volunteers
   const handleAddVol = async (e) => {
     e.preventDefault();
     try {
@@ -96,53 +112,128 @@ const handleVolStatus = async (id, status) => {
     setVolForm({ name: '', email: '', phone: '', availability: 'Weekdays', role: '', status: 'Active' });
   };
 
+  /* ─── FILTERED DATA ─── */
+  const filteredVols = volunteers.filter(v =>
+    !volFilter || v.name?.toLowerCase().includes(volFilter.toLowerCase()) ||
+    v.role?.toLowerCase().includes(volFilter.toLowerCase())
+  );
+  const filteredApps = volApps.filter(a =>
+    !appFilter || a.name?.toLowerCase().includes(appFilter.toLowerCase()) ||
+    a.preferred_role?.toLowerCase().includes(appFilter.toLowerCase())
+  );
+  const filteredDons = donations.filter(d =>
+    !donFilter || d.name?.toLowerCase().includes(donFilter.toLowerCase()) ||
+    d.type?.toLowerCase().includes(donFilter.toLowerCase())
+  );
+
+  /* ─── HELPERS ─── */
   const statusBadge = (s) => {
     const map = { Active: 'green', Inactive: 'gray', Pending: 'yellow', Approved: 'green', Rejected: 'red' };
     return <span className={`badge badge-${map[s] || 'gray'}`}>{s}</span>;
   };
 
+  const avatarCircle = (name, bg = 'var(--green-200)') => (
+    <div style={{ width: 36, height: 36, background: bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)', flexShrink: 0 }}>
+      {(name || '?')[0].toUpperCase()}
+    </div>
+  );
+
+  /* ─── STAT CARD ─── */
+  const StatCard = ({ label, value, sub, subColor, icon, bg }) => (
+    <div className="card" style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, whiteSpace: 'nowrap' }}>{label}</div>
+          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Fraunces',serif", marginBottom: 2, lineHeight: 1.1 }}>{value}</div>
+          {sub != null && (
+            <div style={{ fontSize: 12, color: subColor || 'var(--primary)', fontWeight: 500 }}>
+              {sub}
+            </div>
+          )}
+        </div>
+        <div style={{ width: 56, height: 56, background: bg, borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 8 }}>
+          <img src={icon} alt="" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {toast && <div className="toast" style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999 }}>{toast}</div>}
+      {toast && (
+        <div className="toast" style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999 }}>{toast}</div>
+      )}
 
       {/* ─── STAT CARDS ─── */}
-      <div style={styles.statsRow}>
-        {stats.map(s => (
-          <div key={s.label} className="card" style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{s.label}</div>
-                <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Fraunces',serif", marginBottom: 4 }}>{s.value}</div>
-                {s.sub && <div style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 500 }}>{s.sub}</div>}
-              </div>
-              <div style={{ width: 48, height: 48, background: s.color, borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{s.icon}</div>
-            </div>
-          </div>
-        ))}
+      <div style={s.statsRow}>
+        <StatCard
+          label="Total Volunteers"
+          value={stats.totalVolunteers.value}
+          sub={stats.totalVolunteers.weekDelta != null ? `+${stats.totalVolunteers.weekDelta} this week` : null}
+          subColor="var(--primary)"
+          icon={volunteeringIcon}
+          bg="#e8f5e9"
+        />
+        <StatCard
+          label="Active this month"
+          value={stats.activeThisMonth.value}
+          sub={stats.activeThisMonth.label || null}
+          subColor="var(--primary)"
+          icon={animalCareIcon}
+          bg="#e3f2fd"
+        />
+        <StatCard
+          label="Total Donors"
+          value={stats.totalDonors.value}
+          sub={stats.totalDonors.weekDelta != null ? `+${stats.totalDonors.weekDelta} this week` : null}
+          subColor="#e91e8c"
+          icon={bloodDonationIcon}
+          bg="#fce4ec"
+        />
+        <StatCard
+          label="Fund Raised"
+          value={stats.fundRaised.value}
+          sub={stats.fundRaised.weekPct != null ? `+${stats.fundRaised.weekPct}% this week` : null}
+          subColor="var(--primary)"
+          icon={fundRaisingIcon}
+          bg="#fff3e0"
+        />
       </div>
 
       {/* ─── VOLUNTEER RECORD ─── */}
       <div className="card">
-        <div style={styles.tableHeader}>
-          <h2 style={styles.sectionTitle}>Volunteer Record</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-outline btn-sm">▾ Filter</button>
+        <div style={s.tableHeader}>
+          <h2 style={s.sectionTitle}>Volunteer Record</h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              className="form-input"
+              placeholder="Search name or role…"
+              value={volFilter}
+              onChange={e => setVolFilter(e.target.value)}
+              style={{ height: 32, fontSize: 13, width: 180 }}
+            />
             <button className="btn btn-primary btn-sm" onClick={() => setShowAddVol(true)}>+ Add Volunteer</button>
           </div>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>NAME</th><th>CONTACT</th><th>AVAILABILITY</th><th>ROLE</th><th>STATUS</th><th></th></tr></thead>
+        {/* SCROLL TABLE — same pattern as PetsAndAdoptions */}
+        <div style={s.scrollTable}>
+          <table style={{ minWidth: 620 }}>
+            <thead>
+              <tr>
+                <th>NAME</th><th>CONTACT</th><th>AVAILABILITY</th>
+                <th>ROLE</th><th>STATUS</th><th></th>
+              </tr>
+            </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Loading...</td></tr>
-              ) : volunteers.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No volunteers yet.</td></tr>
-              ) : volunteers.map(v => (
+                <tr><td colSpan={6} style={s.empty}>Loading…</td></tr>
+              ) : filteredVols.length === 0 ? (
+                <tr><td colSpan={6} style={s.empty}>No volunteers found.</td></tr>
+              ) : filteredVols.map(v => (
                 <tr key={v.id}>
                   <td>
-                    <div style={styles.nameCell}>
-                      <div style={styles.avatarCircle}>{(v.name || '?')[0]}</div>
+                    <div style={s.nameCell}>
+                      {avatarCircle(v.name)}
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{v.name}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{v.email}</div>
@@ -154,10 +245,10 @@ const handleVolStatus = async (id, status) => {
                   <td>{v.role}</td>
                   <td>{statusBadge(v.status)}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <button style={styles.linkBtn} onClick={() => setViewVol(v)}>View</button>
-                      <button style={styles.linkBtn} onClick={() => { setEditVol(v); setEditVolForm({ availability: v.availability, role: v.role, status: v.status }); }}>Edit</button>
-                      <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleDeleteVol(v)}>Delete</button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button style={s.linkBtn} onClick={() => setViewVol(v)}>View</button>
+                      <button style={s.linkBtn} onClick={() => { setEditVol(v); setEditVolForm({ availability: v.availability, role: v.role, status: v.status }); }}>Edit</button>
+                      <button style={{ ...s.linkBtn, color: '#e53935' }} onClick={() => handleDeleteVol(v)}>Remove</button>
                     </div>
                   </td>
                 </tr>
@@ -169,21 +260,36 @@ const handleVolStatus = async (id, status) => {
 
       {/* ─── VOLUNTEER APPLICATIONS ─── */}
       <div className="card">
-        <div style={styles.tableHeader}>
-          <h2 style={styles.sectionTitle}>Volunteer Application</h2>
-          <button className="btn btn-outline btn-sm">▾ Filter</button>
+        <div style={s.tableHeader}>
+          <h2 style={s.sectionTitle}>Volunteer Application</h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              className="form-input"
+              placeholder="Search applicants…"
+              value={appFilter}
+              onChange={e => setAppFilter(e.target.value)}
+              style={{ height: 32, fontSize: 13, width: 180 }}
+            />
+          </div>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>NAME/EMAIL</th><th>CONTACT</th><th>AVAILABILITY</th><th>PREFERRED ROLE</th><th>STATUS</th><th></th></tr></thead>
+        <div style={s.scrollTable}>
+          <table style={{ minWidth: 680 }}>
+            <thead>
+              <tr>
+                <th>NAME / EMAIL</th><th>CONTACT</th><th>AVAILABILITY</th>
+                <th>PREFERRED ROLE</th><th>STATUS</th><th></th>
+              </tr>
+            </thead>
             <tbody>
-              {volApps.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No applications yet.</td></tr>
-              ) : volApps.map(a => (
+              {loading ? (
+                <tr><td colSpan={6} style={s.empty}>Loading…</td></tr>
+              ) : filteredApps.length === 0 ? (
+                <tr><td colSpan={6} style={s.empty}>No applications found.</td></tr>
+              ) : filteredApps.map(a => (
                 <tr key={a.id}>
                   <td>
-                    <div style={styles.nameCell}>
-                      <div style={styles.avatarCircle}>{(a.name || '?')[0]}</div>
+                    <div style={s.nameCell}>
+                      {avatarCircle(a.name, '#e3f2fd')}
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{a.name}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{a.email}</div>
@@ -195,10 +301,14 @@ const handleVolStatus = async (id, status) => {
                   <td>{a.preferred_role}</td>
                   <td>{statusBadge(a.status)}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <button style={styles.linkBtn} onClick={() => setViewVolApp(a)}>View</button>
-                      <button style={{ ...styles.linkBtn, color: '#198754' }} onClick={() => handleVolStatus(a.id, 'Approved')}>Approve</button>
-                      <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleVolStatus(a.id, 'Rejected')}>Reject</button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {a.status === 'Pending' && (
+                        <button
+                          style={{ ...s.linkBtn, color: '#2e7d32' }}
+                          onClick={() => handleVolStatus(a.id, 'Approved')}
+                        >Approve</button>
+                      )}
+                      <button style={s.linkBtn} onClick={() => setViewVolApp(a)}>View</button>
                     </div>
                   </td>
                 </tr>
@@ -210,31 +320,48 @@ const handleVolStatus = async (id, status) => {
 
       {/* ─── DONATIONS RECORD ─── */}
       <div className="card">
-        <div style={styles.tableHeader}>
-          <h2 style={styles.sectionTitle}>Donations Record</h2>
-          <button className="btn btn-outline btn-sm">▾ Filter</button>
+        <div style={s.tableHeader}>
+          <h2 style={s.sectionTitle}>Donations Record</h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              className="form-input"
+              placeholder="Search donor or type…"
+              value={donFilter}
+              onChange={e => setDonFilter(e.target.value)}
+              style={{ height: 32, fontSize: 13, width: 180 }}
+            />
+          </div>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>NAME</th><th>CONTACT</th><th>TYPE</th><th>AMOUNT</th><th>DATE</th></tr></thead>
+        <div style={s.scrollTable}>
+          <table style={{ minWidth: 600 }}>
+            <thead>
+              <tr>
+                <th>NAME / EMAIL</th><th>CONTACT</th><th>TYPE</th>
+                <th>AMOUNT</th><th>DATE</th>
+              </tr>
+            </thead>
             <tbody>
-              {donations.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No donations yet.</td></tr>
-              ) : donations.map(d => (
-                <tr key={d.id}>
+              {loading ? (
+                <tr><td colSpan={5} style={s.empty}>Loading…</td></tr>
+              ) : filteredDons.length === 0 ? (
+                <tr><td colSpan={5} style={s.empty}>No donations found.</td></tr>
+              ) : filteredDons.map((d, i) => (
+                <tr key={d.id ?? i}>
                   <td>
-                    <div style={styles.nameCell}>
-                      <div style={styles.avatarCircle}>{(d.donor_name || d.name || 'D')[0]}</div>
+                    <div style={s.nameCell}>
+                      {avatarCircle(d.name, '#fff3e0')}
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{d.donor_name || d.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.donor_email || d.email}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{d.name}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.email}</div>
                       </div>
                     </div>
                   </td>
-                  <td>{d.donor_phone || d.phone}</td>
+                  <td>{d.phone}</td>
                   <td>{d.type}</td>
-                  <td style={{ fontWeight: 600 }}>₱{Number(d.amount).toLocaleString()}</td>
-                  <td>{new Date(d.donated_at || d.date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    ₱{Number(d.amount ?? 0).toLocaleString()}
+                  </td>
+                  <td>{d.date ? new Date(d.date).toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -242,7 +369,9 @@ const handleVolStatus = async (id, status) => {
         </div>
       </div>
 
-      {/* ─── ADD VOLUNTEER MODAL ─── */}
+      {/* ════════════════ MODALS ════════════════ */}
+
+      {/* ADD VOLUNTEER */}
       {showAddVol && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddVol(false)}>
           <div className="modal">
@@ -290,7 +419,7 @@ const handleVolStatus = async (id, status) => {
         </div>
       )}
 
-      {/* ─── VIEW VOLUNTEER MODAL ─── */}
+      {/* VIEW VOLUNTEER */}
       {viewVol && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewVol(null)}>
           <div className="modal">
@@ -299,19 +428,23 @@ const handleVolStatus = async (id, status) => {
               <button className="modal-close" onClick={() => setViewVol(null)}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
-              {[['Name', viewVol.name], ['Email', viewVol.email], ['Phone', viewVol.phone], ['Availability', viewVol.availability], ['Role', viewVol.role], ['Status', viewVol.status]].map(([l, v]) => (
-                <div key={l} style={styles.detailRow}>
-                  <span style={styles.detailLbl}>{l}</span>
-                  <span>{v}</span>
-                </div>
+              {[['Name', viewVol.name],['Email', viewVol.email],['Phone', viewVol.phone],
+                ['Availability', viewVol.availability],['Role', viewVol.role],['Status', viewVol.status]]
+                .map(([l, v]) => (
+                  <div key={l} style={s.detailRow}>
+                    <span style={s.detailLbl}>{l}</span>
+                    <span>{l === 'Status' ? statusBadge(v) : v}</span>
+                  </div>
               ))}
             </div>
-            <button className="btn btn-outline" style={{ marginTop: 20 }} onClick={() => setViewVol(null)}>Close</button>
+            <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button className="btn btn-outline" onClick={() => setViewVol(null)}>Close</button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ─── EDIT VOLUNTEER MODAL ─── */}
+      {/* EDIT VOLUNTEER */}
       {editVol && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditVol(null)}>
           <div className="modal">
@@ -347,7 +480,7 @@ const handleVolStatus = async (id, status) => {
         </div>
       )}
 
-      {/* ─── VIEW VOLUNTEER APPLICATION MODAL ─── */}
+      {/* VIEW APPLICATION */}
       {viewVolApp && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewVolApp(null)}>
           <div className="modal">
@@ -357,21 +490,21 @@ const handleVolStatus = async (id, status) => {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
               {[
-                ['Name', viewVolApp.name],
-                ['Email', viewVolApp.email],
-                ['Phone', viewVolApp.phone],
-                ['Availability', viewVolApp.availability],
-                ['Preferred Role', viewVolApp.preferred_role],
-                ['Motivation', viewVolApp.motivation],
-                ['Experience', viewVolApp.experience],
+                ['Name',          viewVolApp.name],
+                ['Email',         viewVolApp.email],
+                ['Phone',         viewVolApp.phone],
+                ['Availability',  viewVolApp.availability],
+                ['Preferred Role',viewVolApp.preferred_role],
+                ['Motivation',    viewVolApp.motivation],
+                ['Experience',    viewVolApp.experience],
               ].filter(([, v]) => v).map(([l, v]) => (
-                <div key={l} style={styles.detailRow}>
-                  <span style={styles.detailLbl}>{l}</span>
+                <div key={l} style={s.detailRow}>
+                  <span style={s.detailLbl}>{l}</span>
                   <span style={{ flex: 1 }}>{v}</span>
                 </div>
               ))}
-              <div style={styles.detailRow}>
-                <span style={styles.detailLbl}>Status</span>
+              <div style={s.detailRow}>
+                <span style={s.detailLbl}>Status</span>
                 {statusBadge(viewVolApp.status)}
               </div>
             </div>
@@ -386,13 +519,16 @@ const handleVolStatus = async (id, status) => {
   );
 }
 
-const styles = {
-  statsRow: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 },
-  tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontWeight: 700, fontSize: 16 },
-  nameCell: { display: 'flex', alignItems: 'center', gap: 10 },
-  avatarCircle: { width: 36, height: 36, background: 'var(--green-200)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)', flexShrink: 0 },
-  linkBtn: { background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: 0 },
-  detailRow: { display: 'flex', gap: 12, paddingBottom: 10, borderBottom: '1px solid var(--border)', alignItems: 'center' },
-  detailLbl: { minWidth: 100, color: 'var(--text-muted)', fontWeight: 500 },
+/* ─── STYLES ─── */
+const s = {
+  statsRow:   { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 },
+  tableHeader:{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitle:{ fontWeight: 700, fontSize: 16 },
+  /* Same scroll logic as PetsAndAdoptions */
+  scrollTable:{ overflowY: 'auto', maxHeight: 280, borderRadius: 8, border: '1px solid var(--border)' },
+  nameCell:   { display: 'flex', alignItems: 'center', gap: 10 },
+  linkBtn:    { background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: 0 },
+  detailRow:  { display: 'flex', gap: 12, paddingBottom: 10, borderBottom: '1px solid var(--border)', alignItems: 'center' },
+  detailLbl:  { minWidth: 110, color: 'var(--text-muted)', fontWeight: 500 },
+  empty:      { textAlign: 'center', padding: 28, color: 'var(--text-muted)' },
 };
