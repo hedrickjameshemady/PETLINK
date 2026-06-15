@@ -46,15 +46,16 @@ router.post('/', authMiddleware, async (req, res) => {
   try {
     const { pet_id, living_situation, has_yard, other_pets, children_at_home, experience_with_pets, reason_for_adoption, preferred_contact } = req.body;
 
-    const count = await db.query('SELECT COUNT(*) as cnt FROM adoption_applications');
-    const appId = `APP${String(count[0][0].cnt + 1).padStart(3, '0')}`;
+    const [[maxRow]] = await db.query('SELECT MAX(id) as maxId FROM adoption_applications');
+    const nextNum = (maxRow.maxId || 0) + 1;
+    const appId = `APP${String(nextNum).padStart(3, '0')}`;
 
     const [result] = await db.query(
       `INSERT INTO adoption_applications (application_id, applicant_id, pet_id, living_situation, has_yard, other_pets, children_at_home, experience_with_pets, reason_for_adoption, preferred_contact)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
       [appId, req.user.id, pet_id, living_situation, has_yard, other_pets, children_at_home, experience_with_pets, reason_for_adoption, preferred_contact]
     );
-    
+
     // Update pet status to Pending
     await db.query("UPDATE pets SET status = 'Pending' WHERE id = ?", [pet_id]);
 
@@ -74,10 +75,15 @@ router.patch('/:id/status', authMiddleware, adminMiddleware, async (req, res) =>
     if (status === 'Approved') {
       const [app] = await db.query('SELECT pet_id FROM adoption_applications WHERE id = ?', [req.params.id]);
       await db.query("UPDATE pets SET status = 'Adopted' WHERE id = ?", [app[0].pet_id]);
+      await db.query(
+        "UPDATE adoption_applications SET status = 'Rejected', review_notes = 'Another applicant was selected.' WHERE pet_id = ? AND id != ? AND status = 'Pending Review'",
+        [app[0].pet_id, req.params.id]
+      );
     } else if (status === 'Rejected') {
       const [app] = await db.query('SELECT pet_id FROM adoption_applications WHERE id = ?', [req.params.id]);
       await db.query("UPDATE pets SET status = 'Available' WHERE id = ?", [app[0].pet_id]);
     }
+
     res.json({ message: `Application ${status}` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

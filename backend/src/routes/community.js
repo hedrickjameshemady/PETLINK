@@ -69,12 +69,25 @@ router.post('/campaigns/:id/join', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Get single campaign
+// Get single campaign — applies same status computation as GET /campaigns
 router.get('/campaigns/:id', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
-    res.json(rows[0]);
+
+    const c = rows[0];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = c.start_date ? new Date(c.start_date) : null;
+    const end = c.end_date ? new Date(c.end_date) : null;
+
+    if (c.status !== 'Cancelled' && c.status !== 'Completed') {
+      if (end && today > end) c.status = 'Completed';
+      else if (start && today >= start) c.status = 'Active';
+      else c.status = 'Upcoming';
+    }
+
+    res.json(c);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -123,7 +136,6 @@ router.get('/dashboard-stats', authMiddleware, adminMiddleware, async (req, res)
     const [[vols]] = await db.query('SELECT COUNT(*) AS total FROM volunteers WHERE status="Active"');
     const [[dons]] = await db.query('SELECT COALESCE(SUM(amount),0) AS raised FROM donations');
 
-    // Use separate COUNT queries for lost_found — more reliable across MySQL versions
     const [[lfTotal]]    = await db.query(`SELECT COUNT(*) AS value FROM lost_found_reports`);
     const [[lfPending]]  = await db.query(`SELECT COUNT(*) AS value FROM lost_found_reports WHERE status = 'Pending Review'`);
     const [[lfApproved]] = await db.query(`SELECT COUNT(*) AS value FROM lost_found_reports WHERE status = 'Approved'`);
@@ -157,16 +169,14 @@ router.get('/campaigns/:id/donations', authMiddleware, adminMiddleware, async (r
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Dashboard detail data: recent pets, pending applications, upcoming events, volunteers, top donors
+// Dashboard detail data
 router.get('/dashboard-detail', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    // Recent pet arrivals (last 4, available only)
     const [recentPets] = await db.query(
       `SELECT id, name, breed, type, gender, age_years, status, photo, created_at
        FROM pets ORDER BY created_at DESC LIMIT 4`
     );
 
-    // Pending adoption + volunteer applications
     const [pendingAdoptions] = await db.query(
       `SELECT aa.id, aa.applied_at, aa.status, 'Adoption Application' AS app_type,
               CONCAT(u.first_name, ' ', u.last_name) AS applicant_name,
@@ -189,7 +199,6 @@ router.get('/dashboard-detail', authMiddleware, adminMiddleware, async (req, res
       .sort((a, b) => new Date(b.applied_at) - new Date(a.applied_at))
       .slice(0, 3);
 
-    // Upcoming events (status Upcoming or Active, ordered by start_date)
     const [upcomingEvents] = await db.query(
       `SELECT id, title, type, start_date, location, status
        FROM campaigns
@@ -197,7 +206,6 @@ router.get('/dashboard-detail', authMiddleware, adminMiddleware, async (req, res
        ORDER BY start_date ASC LIMIT 3`
     );
 
-    // Total volunteers + new signups this week
     const [[volTotal]] = await db.query(
       `SELECT COUNT(*) AS total FROM volunteers WHERE status = 'Active'`
     );
@@ -208,7 +216,6 @@ router.get('/dashboard-detail', authMiddleware, adminMiddleware, async (req, res
        ORDER BY v.created_at DESC LIMIT 5`
     );
 
-    // Total donations this week
     const [[donWeek]] = await db.query(
       `SELECT COALESCE(SUM(amount), 0) AS total FROM donations
        WHERE donated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`
@@ -219,7 +226,6 @@ router.get('/dashboard-detail', authMiddleware, adminMiddleware, async (req, res
          AND donated_at < DATE_SUB(NOW(), INTERVAL 7 DAY)`
     );
 
-    // Top donors (by total amount donated)
     const [topDonors] = await db.query(
       `SELECT donor_name, donor_email, SUM(amount) AS total_donated, COUNT(*) AS donation_count
        FROM donations

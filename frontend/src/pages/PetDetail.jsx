@@ -12,10 +12,6 @@ const EMPTY_FORM = {
   experience_with_pets: '',
   reason_for_adoption: '',
   preferred_contact: 'Email',
-  full_name: '',
-  email: '',
-  phone: '',
-  address: '',
 };
 
 export default function PetDetail() {
@@ -52,7 +48,6 @@ export default function PetDetail() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) { navigate('/login'); return; }
-
     try {
       setSubmitting(true);
       await API.post('/adoptions', { ...form, pet_id: id });
@@ -158,7 +153,7 @@ export default function PetDetail() {
           </div>
         </div>
 
-        {/* Adoption Modal — matches Adopt.jsx exactly */}
+        {/* Adoption Modal */}
         {showForm && !success && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
             <div className="modal">
@@ -219,26 +214,6 @@ export default function PetDetail() {
                     <option>Email</option>
                     <option>Phone</option>
                   </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Full Name</label>
-                  <input className="form-input" placeholder="Your full name" value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Email Address</label>
-                  <input className="form-input" type="email" placeholder="your@email.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Phone Number</label>
-                  <input className="form-input" type="tel" placeholder="e.g. 09171234567" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Address</label>
-                  <input className="form-input" placeholder="Your current address" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
