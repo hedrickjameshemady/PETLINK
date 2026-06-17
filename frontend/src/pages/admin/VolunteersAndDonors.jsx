@@ -122,9 +122,11 @@ export default function VolunteersAndDonors() {
     a.preferred_role?.toLowerCase().includes(appFilter.toLowerCase())
   );
   const filteredDons = donations.filter(d =>
-    !donFilter || d.name?.toLowerCase().includes(donFilter.toLowerCase()) ||
+    !donFilter || d.donor_name?.toLowerCase().includes(donFilter.toLowerCase()) ||
     d.type?.toLowerCase().includes(donFilter.toLowerCase())
   );
+
+
 
   /* ─── HELPERS ─── */
   const statusBadge = (s) => {
@@ -349,19 +351,19 @@ export default function VolunteersAndDonors() {
                 <tr key={d.id ?? i}>
                   <td>
                     <div style={s.nameCell}>
-                      {avatarCircle(d.name, '#fff3e0')}
+                      {avatarCircle(d.donor_name, '#fff3e0')}
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{d.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.email}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{d.donor_name || 'Anonymous'}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.donor_email}</div>
                       </div>
                     </div>
                   </td>
-                  <td>{d.phone}</td>
+                  <td>{d.donor_phone || '—'}</td>
                   <td>{d.type}</td>
                   <td style={{ fontWeight: 600 }}>
                     ₱{Number(d.amount ?? 0).toLocaleString()}
                   </td>
-                  <td>{d.date ? new Date(d.date).toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—'}</td>
+                  <td>{d.donated_at ? new Date(d.donated_at).toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—'}</td>
                 </tr>
               ))}
             </tbody>

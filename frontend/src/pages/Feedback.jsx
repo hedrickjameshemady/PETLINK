@@ -61,7 +61,7 @@ export default function Feedback() {
                 <div className="form-group">
                   <label className="form-label">Category</label>
                   <select className="form-select" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                    {['General', 'Adoption', 'Volunteer', 'Donation', 'Website', 'Other'].map(c => <option key={c}>{c}</option>)}
+                    {['General', 'Adoption', 'Volunteer', 'Event', 'Donation', 'Website', 'Other'].map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="form-group">

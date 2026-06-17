@@ -1,8 +1,21 @@
 const express = require('express');
 const db = require('../config/db');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
+
+// ─── Announcements upload config ───────────────────────────────────────────
+const announcementUploadDir = path.join(__dirname, '../uploads/announcements');
+if (!fs.existsSync(announcementUploadDir)) fs.mkdirSync(announcementUploadDir, { recursive: true });
+
+const announcementStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, announcementUploadDir),
+  filename: (req, file, cb) => cb(null, `ann_${Date.now()}_${file.fieldname}${path.extname(file.originalname)}`),
+});
+const uploadAnnouncement = multer({ storage: announcementStorage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 
 router.get('/campaigns', async (req, res) => {
@@ -30,10 +43,10 @@ router.get('/campaigns', async (req, res) => {
 // Create campaign (admin)
 router.post('/campaigns', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { title, type, description, target_amount, start_date, end_date, location } = req.body;
+    const { title, type, status, description, target_amount, start_date, end_date, location } = req.body;
     const [result] = await db.query(
-      'INSERT INTO campaigns (title, type, description, target_amount, start_date, end_date, location, created_by) VALUES (?,?,?,?,?,?,?,?)',
-      [title, type, description, target_amount, start_date, end_date, location, req.user.id]
+      'INSERT INTO campaigns (title, type, status, description, target_amount, start_date, end_date, location, created_by) VALUES (?,?,?,?,?,?,?,?,?)',
+      [title, type, status || 'Upcoming', description, target_amount || null, start_date || null, end_date || null, location || null, req.user.id]
     );
     res.status(201).json({ id: result.insertId, message: 'Campaign created' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -128,6 +141,45 @@ router.get('/feedback', authMiddleware, adminMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── Announcements & News ───────────────────────────────────────────────────
+// Get all announcements (pinned first, then newest first)
+router.get('/announcements', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM announcements ORDER BY is_pinned DESC, created_at DESC');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Post a new announcement (admin) — accepts optional photo and/or video
+router.post(
+  '/announcements',
+  authMiddleware,
+  adminMiddleware,
+  uploadAnnouncement.fields([{ name: 'photo', maxCount: 1 }, { name: 'video', maxCount: 1 }]),
+  async (req, res) => {
+    try {
+      const { headline, message } = req.body;
+      const photoUrl = req.files?.photo?.[0] ? `/uploads/announcements/${req.files.photo[0].filename}` : null;
+      const videoUrl = req.files?.video?.[0] ? `/uploads/announcements/${req.files.video[0].filename}` : null;
+
+      const [result] = await db.query(
+        'INSERT INTO announcements (headline, message, photo, video, created_by) VALUES (?,?,?,?,?)',
+        [headline, message || null, photoUrl, videoUrl, req.user.id]
+      );
+      res.status(201).json({ id: result.insertId, message: 'Announcement posted' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  }
+);
+
+// Pin / unpin an announcement (admin)
+router.patch('/announcements/:id/pin', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { is_pinned } = req.body;
+    await db.query('UPDATE announcements SET is_pinned=? WHERE id=?', [is_pinned ? 1 : 0, req.params.id]);
+    res.json({ message: 'Announcement updated' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── Dashboard stats ──────────────────────────────────────────────────────────
 router.get('/dashboard-stats', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -158,11 +210,25 @@ router.get('/dashboard-stats', authMiddleware, adminMiddleware, async (req, res)
   }
 });
 
-// Get donations for a specific campaign
 router.get('/campaigns/:id/donations', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query(
       'SELECT donor_name, donor_email, amount, donated_at, message FROM donations WHERE campaign_id = ? ORDER BY donated_at DESC',
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Get everyone who joined a non-donation event/campaign
+router.get('/campaigns/:id/participants', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT cp.id, cp.joined_at, u.first_name, u.last_name, u.email
+       FROM campaign_participants cp
+       JOIN users u ON cp.user_id = u.id
+       WHERE cp.campaign_id = ?
+       ORDER BY cp.joined_at DESC`,
       [req.params.id]
     );
     res.json(rows);

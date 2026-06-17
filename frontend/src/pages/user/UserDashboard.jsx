@@ -483,7 +483,7 @@ export default function UserDashboard() {
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{q.label}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{q.desc}</div>
             </Link>
-          ))}
+          ))} 
         </div>
 
       </main>
