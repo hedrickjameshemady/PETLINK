@@ -86,10 +86,11 @@ router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async 
     const nextId = (maxRow.maxNum || 0) + 1;
     const petId = `PET${String(nextId).padStart(3, '0')}`;
 
+    const { vaccine_log, neutered_date } = req.body;
     const [result] = await db.query(
-      `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by, photo, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [petId, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status || 'Available', description, intake_date, req.user.id, photoUrl, vet_name || null, clinic_name || null, last_checkup_date || null, vaccines_given || null, medical_notes || null]
+      `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by, photo, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, neutered_date, vaccine_log)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [petId, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status ? 1 : 0, neutered ? 1 : 0, microchipped, status || 'Available', description, intake_date, req.user.id, photoUrl, vet_name || null, clinic_name || null, last_checkup_date || null, vaccines_given || null, medical_notes || null, neutered_date || null, vaccine_log || null]
     );
     res.status(201).json({ id: result.insertId, pet_id: petId, message: 'Pet added successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -98,9 +99,18 @@ router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async 
 // Update pet
 router.put('/:id', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { name, type, breed, age_years, gender, health_status, status, description, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes } = req.body;
-    const fields = [name, type, breed, age_years, gender, health_status, status, description, vet_name || null, clinic_name || null, last_checkup_date || null, vaccines_given || null, medical_notes || null];
-    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, health_status=?, status=?, description=?, vet_name=?, clinic_name=?, last_checkup_date=?, vaccines_given=?, medical_notes=?';
+    const { name, type, breed, age_years, gender, health_status, status, description, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, vaccination_status, neutered, neutered_date, vaccine_log } = req.body;
+    const nullify = (v) => (v === '' || v === undefined || v === 'null') ? null : v;
+    const fields = [
+      name, type, breed, age_years, gender, health_status, status, description,
+      nullify(vet_name), nullify(clinic_name), nullify(last_checkup_date),
+      nullify(vaccines_given), nullify(medical_notes),
+      (vaccination_status === 'true' || vaccination_status === true) ? 1 : 0,
+      (neutered === 'true' || neutered === true) ? 1 : 0,
+      nullify(neutered_date),
+      nullify(vaccine_log),
+    ];
+    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, health_status=?, status=?, description=?, vet_name=?, clinic_name=?, last_checkup_date=?, vaccines_given=?, medical_notes=?, vaccination_status=?, neutered=?, neutered_date=?, vaccine_log=?';
     if (req.file) {
       query += ', photo=?';
       fields.push(`/uploads/pets/${req.file.filename}`);
