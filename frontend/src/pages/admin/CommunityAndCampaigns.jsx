@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API } from '../../context/AuthContext';
+import { ConfirmModal } from '../../components/ConfirmDialog';
 
 const EVENT_TYPES = ['Adoption', 'Volunteer', 'Fundraiser', 'Event', 'Drive', 'Campaign'];
 const NEEDS_TARGET = (type) => type === 'Fundraiser' || type === 'Drive';
@@ -81,6 +82,7 @@ export default function CommunityAndCampaigns() {
   const [posting, setPosting] = useState(false);
 
   const [toast, setToast] = useState('');
+  const [confirmState, setConfirmState] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -146,15 +148,20 @@ export default function CommunityAndCampaigns() {
     setEditEvent(null);
   };
 
-  const handleDeleteEvent = async (ev) => {
-    if (!window.confirm(`Delete "${ev.title}"? This cannot be undone.`)) return;
-    try {
-      await API.delete(`/campaigns/${ev.id}`);
-      showToast('Event deleted.');
-      setEvents(prev => prev.filter(e => e.id !== ev.id));
-    } catch (err) {
-      showToast(err?.response?.data?.error || 'Failed to delete event.');
-    }
+  const handleDeleteEvent = (ev) => {
+    setConfirmState({
+      title: 'Are you sure about deleting?',
+      message: `"${ev.title}" will be permanently deleted. This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await API.delete(`/campaigns/${ev.id}`);
+          showToast('Event deleted.');
+          setEvents(prev => prev.filter(e => e.id !== ev.id));
+        } catch (err) {
+          showToast(err?.response?.data?.error || 'Failed to delete event.');
+        }
+      },
+    });
   };
 
   const filteredEvents = typeFilter === 'All Types' ? events : events.filter(e => e.type === typeFilter);
@@ -252,6 +259,15 @@ export default function CommunityAndCampaigns() {
       `}</style>
 
       {toast && <div className="toast" style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999 }}>{toast}</div>}
+
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={() => { confirmState.onConfirm(); setConfirmState(null); }}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
 
       {/* ─── EVENTS & CAMPAIGN ─── */}
       <div className="card">

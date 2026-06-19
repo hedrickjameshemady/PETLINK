@@ -166,6 +166,27 @@ tr:hover td { background: var(--green-50); }
 .modal-title { font-size: 18px; font-weight: 700; }
 .modal-close { background: none; border: none; font-size: 22px; color: var(--text-muted); cursor: pointer; }
 
+/* ─── CONFIRM / SUCCESS CARD ─── */
+.confirm-card {
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 48px 40px 32px;
+  width: 100%;
+  max-width: 460px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.confirm-icon { width: 84px; height: 84px; object-fit: contain; margin-bottom: 20px; }
+.confirm-title { font-size: 21px; font-weight: 700; color: var(--text-dark); margin-bottom: 10px; }
+.confirm-message { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 24px; }
+.confirm-actions { display: flex; gap: 10px; width: 100%; }
+.confirm-actions-end { justify-content: flex-end; }
+.confirm-actions-center { justify-content: center; }
+.confirm-actions-center .btn { min-width: 90px; justify-content: center; }
+
 /* ─── SCROLLBAR ─── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

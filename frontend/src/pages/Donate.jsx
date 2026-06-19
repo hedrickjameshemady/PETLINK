@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
+import { SuccessModal } from '../components/ConfirmDialog';
 
 export function Donate() {
   const { user } = useAuth();
@@ -44,13 +45,15 @@ export function Donate() {
           ))}
         </div>
 
-        {submitted ? (
-          <div style={styles.successBox}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>💚</div>
-            <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 22, marginBottom: 8 }}>Thank You!</h2>
-            <p style={{ color: 'var(--text-muted)' }}>Your donation of ₱{form.amount} has been recorded. You're making a real difference!</p>
-          </div>
-        ) : (
+      {submitted && (
+          <SuccessModal
+            title="Donation Successful"
+            message="Thank you for your generous support. Your donation has been successfully processed and will help us care for rescued animals. A confirmation record has been saved for your reference."
+            onClose={() => setSubmitted(false)}
+          />
+        )}
+
+        {!submitted && (
           <div className="card" style={{ marginTop: 28 }}>
             <h2 style={{ fontWeight: 700, fontSize: 17, marginBottom: 18 }}>Donation Details</h2>
             <form onSubmit={(e) => { e.preventDefault(); if (!user) { navigate('/login'); return; } handleSubmit(e); }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

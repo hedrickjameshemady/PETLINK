@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
+import { SuccessModal } from '../components/ConfirmDialog';
 
 export default function Feedback() {
   const { user } = useAuth();
@@ -35,13 +36,15 @@ export default function Feedback() {
           We'd love to hear from you. Your feedback helps us improve PETLINK for everyone.
         </p>
 
-        {submitted ? (
-          <div style={{ background: 'var(--green-50)', border: '2px solid var(--green-200)', borderRadius: 'var(--radius-xl)', padding: '48px 32px', textAlign: 'center' }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>💚</div>
-            <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 22, marginBottom: 8 }}>Thank You!</h2>
-            <p style={{ color: 'var(--text-muted)' }}>Your feedback has been submitted. We appreciate you taking the time to share your thoughts.</p>
-          </div>
-        ) : (
+        {submitted && (
+          <SuccessModal
+            title="Feedback Submitted"
+            message="Thank you for sharing your feedback. Your message has been successfully sent and will help us improve PETLINK's services and user experience."
+            onClose={() => setSubmitted(false)}
+          />
+        )}
+
+        {!submitted && (
           <div className="card">
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {!user && (

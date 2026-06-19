@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API } from '../../context/AuthContext';
+import { ConfirmModal } from '../../components/ConfirmDialog';
 
 export default function PetsAndAdoptions() {
   const [pets, setPets] = useState([]);
@@ -15,6 +16,7 @@ export default function PetsAndAdoptions() {
   const [viewApp, setViewApp] = useState(null);
   const [viewPet, setViewPet] = useState(null);
   const [toast, setToast] = useState('');
+  const [confirmState, setConfirmState] = useState(null);
   const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [] });
   const [petPhotoFile, setPetPhotoFile] = useState(null);
   const [petPhotoPreview, setPetPhotoPreview] = useState(null);
@@ -66,23 +68,40 @@ export default function PetsAndAdoptions() {
   };
 
   const handleStatus = async (appId, status) => {
-    try {
-      await API.patch(`/adoptions/${appId}/status`, { status });
-    } catch { /* demo */ }
-    setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
-    showToast(`Application ${status}`);
+    const apply = async () => {
+      try {
+        await API.patch(`/adoptions/${appId}/status`, { status });
+      } catch { /* demo */ }
+      setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
+      showToast(`Application ${status}`);
+    };
+
+    if (status === 'Rejected') {
+      setConfirmState({
+        title: 'Are you sure about rejecting?',
+        message: 'The applicant will be notified that their adoption application was not approved.',
+        onConfirm: apply,
+      });
+      return;
+    }
+    apply();
   };
 
-  const handleDeleteApp = async (appId) => {
-    if (!window.confirm('Delete this application? This cannot be undone.')) return;
-    try {
-      await API.delete(`/adoptions/${appId}`);
-      showToast('Application deleted.');
-      fetchAll();
-    } catch {
-      setApplications(prev => prev.filter(a => a.id !== appId));
-      showToast('Application deleted (demo mode).');
-    }
+  const handleDeleteApp = (appId) => {
+    setConfirmState({
+      title: 'Are you sure about deleting?',
+      message: 'This application will be permanently deleted. This cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await API.delete(`/adoptions/${appId}`);
+          showToast('Application deleted.');
+          fetchAll();
+        } catch {
+          setApplications(prev => prev.filter(a => a.id !== appId));
+          showToast('Application deleted (demo mode).');
+        }
+      },
+    });
   };
 
   const handleEditPet = async (e) => {
@@ -106,16 +125,21 @@ export default function PetsAndAdoptions() {
     setEditPhotoPreview(null);
   };
 
-  const handleDeletePet = async (pet) => {
-    if (!window.confirm(`Delete ${pet.name}? This cannot be undone.`)) return;
-    try {
-      await API.delete(`/pets/${pet.id}`);
-      showToast('Pet deleted.');
-      fetchAll();
-    } catch {
-      setPets(prev => prev.filter(p => p.id !== pet.id));
-      showToast('Pet deleted (demo mode).');
-    }
+  const handleDeletePet = (pet) => {
+    setConfirmState({
+      title: 'Are you sure about deleting?',
+      message: `${pet.name} will be permanently removed from the system. This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await API.delete(`/pets/${pet.id}`);
+          showToast('Pet deleted.');
+          fetchAll();
+        } catch {
+          setPets(prev => prev.filter(p => p.id !== pet.id));
+          showToast('Pet deleted (demo mode).');
+        }
+      },
+    });
   };
 
   const handleSaveAssessment = async (e) => {
@@ -222,6 +246,15 @@ const finishedPets = pets.filter(p => p.status === 'Adopted').sort((a, b) => a.p
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {toast && <div className={`toast${toast.err ? ' toast-error' : ''}`} style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999 }}>{toast.msg}</div>}
+
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={() => { confirmState.onConfirm(); setConfirmState(null); }}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
 
       {/* ─── PET RECORDS TABLE ─── */}
       <div className="card">

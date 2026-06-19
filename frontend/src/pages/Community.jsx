@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
+import { SuccessModal } from '../components/ConfirmDialog';
 
 export default function Community() {
   const [campaigns, setCampaigns] = useState([]);
@@ -10,6 +11,7 @@ export default function Community() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [joined, setJoined] = useState({});
+  const [showJoinedModal, setShowJoinedModal] = useState(false);
 
   useEffect(() => {
     API.get('/campaigns')
@@ -28,7 +30,7 @@ export default function Community() {
       await API.post(`/campaigns/${campaignId}/join`);
     } catch { /* already joined or offline */ }
     setJoined(prev => ({ ...prev, [campaignId]: true }));
-    alert('You have successfully joined this event!');
+    setShowJoinedModal(true);
   };
 
   const statusBadge = (s) => {
@@ -132,6 +134,13 @@ export default function Community() {
           </div>
         )}
       </main>
+      {showJoinedModal && (
+        <SuccessModal
+          title="Event Joined Successfully"
+          message="You're all set! Your spot for this event has been confirmed. We look forward to seeing you there."
+          onClose={() => setShowJoinedModal(false)}
+        />
+      )}
       <Footer />
     </div>
   );

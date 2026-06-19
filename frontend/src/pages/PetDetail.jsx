@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
+import { SuccessModal } from '../components/ConfirmDialog';
 
 const EMPTY_FORM = {
   living_situation: '',
@@ -312,14 +313,12 @@ export default function PetDetail() {
         )}
 
         {success && (
-          <div className="modal-overlay">
-            <div className="modal" style={{ textAlign: 'center', padding: '48px 32px' }}>
-              <div style={{ fontSize: 56, marginBottom: 16 }}>🐾</div>
-              <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 24, marginBottom: 12 }}>Application Submitted!</h2>
-              <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>Thank you for applying to adopt {pet.name}. We'll review your application and get back to you soon.</p>
-              <button className="btn btn-primary" onClick={() => navigate('/adopt')} style={{ margin: '0 auto' }}>Browse More Pets</button>
-            </div>
-          </div>
+          <SuccessModal
+            title="Application Submitted Successfully"
+            message="Your adoption application has been received. Our team will review your request and contact you with updates. You can check the status of your application anytime in your email."
+            buttonText="Close"
+            onClose={() => navigate('/adopt')}
+          />
         )}
       </main>
       <Footer />

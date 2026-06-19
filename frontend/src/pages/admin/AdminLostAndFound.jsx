@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { API } from '../../context/AuthContext';
+import { ConfirmModal } from '../../components/ConfirmDialog';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const PET_TYPES = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
@@ -452,6 +453,7 @@ export default function AdminLostAndFound() {
   const [viewReport,  setViewReport]  = useState(null);
   const [showPost,    setShowPost]    = useState(false);
   const [successMsg,  setSuccessMsg]  = useState('');
+  const [confirmState, setConfirmState] = useState(null);
 
   const fetchReports = () => {
     setLoading(true);
@@ -465,35 +467,55 @@ export default function AdminLostAndFound() {
 
   const flash = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 5000); };
 
-  const handleApprove = async (id) => {
-    if (!window.confirm('Approve this report? It will become visible to the public.')) return;
-    try { await API.patch(`/lostfound/${id}/approve`); fetchReports(); flash('Report approved and published!'); }
-    catch { alert('Failed to approve.'); }
+  const handleApprove = (id) => {
+    setConfirmState({
+      title: 'Are you sure about approving?',
+      message: 'This report will become visible to the public.',
+      onConfirm: async () => {
+        try { await API.patch(`/lostfound/${id}/approve`); fetchReports(); flash('Report approved and published!'); }
+        catch { alert('Failed to approve.'); }
+      },
+    });
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this report? This cannot be undone.')) return;
-    try {
-      await API.delete(`/lostfound/${id}`);
-      if (viewReport?.id === id) setViewReport(null);
-      fetchReports(); flash('Report deleted.');
-    } catch { alert('Failed to delete.'); }
+  const handleDelete = (id) => {
+    setConfirmState({
+      title: 'Are you sure about deleting?',
+      message: 'This report will be permanently deleted. This cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await API.delete(`/lostfound/${id}`);
+          if (viewReport?.id === id) setViewReport(null);
+          fetchReports(); flash('Report deleted.');
+        } catch { alert('Failed to delete.'); }
+      },
+    });
   };
 
-  const handleReunite = async (id) => {
-    if (!window.confirm('Mark this pet as reunited with its owner?')) return;
-    try { await API.patch(`/lostfound/${id}/reunite-admin`); fetchReports(); flash('🐾 Marked as Reunited!'); }
-    catch { alert('Failed to update.'); }
+  const handleReunite = (id) => {
+    setConfirmState({
+      title: 'Are you sure about marking this as reunited?',
+      message: 'This pet will be marked as reunited with its owner.',
+      onConfirm: async () => {
+        try { await API.patch(`/lostfound/${id}/reunite-admin`); fetchReports(); flash('🐾 Marked as Reunited!'); }
+        catch { alert('Failed to update.'); }
+      },
+    });
   };
 
-  const handleStatusChange = async (id, newStatus) => {
-    if (!window.confirm(`Change status to "${newStatus}"?`)) return;
-    try {
-      await API.patch(`/lostfound/${id}/status`, { status: newStatus });
-      if (viewReport?.id === id) setViewReport(null);
-      fetchReports();
-      flash(`Status updated to "${newStatus}".`);
-    } catch { alert('Failed to update status.'); }
+  const handleStatusChange = (id, newStatus) => {
+    setConfirmState({
+      title: `Are you sure about changing the status to "${newStatus}"?`,
+      message: '',
+      onConfirm: async () => {
+        try {
+          await API.patch(`/lostfound/${id}/status`, { status: newStatus });
+          if (viewReport?.id === id) setViewReport(null);
+          fetchReports();
+          flash(`Status updated to "${newStatus}".`);
+        } catch { alert('Failed to update status.'); }
+      },
+    });
   };
 
   // Buckets
@@ -512,6 +534,15 @@ export default function AdminLostAndFound() {
         <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>
           ✅ {successMsg}
         </div>
+      )}
+
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={() => { confirmState.onConfirm(); setConfirmState(null); }}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
 
       {/* ── Stats ── */}

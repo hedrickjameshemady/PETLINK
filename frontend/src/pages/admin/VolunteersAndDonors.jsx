@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API } from '../../context/AuthContext';
+import { ConfirmModal } from '../../components/ConfirmDialog';
 
 // Use your actual uploaded image paths — adjust if your assets folder differs
 import fundRaisingIcon from '../../assets/fund-raising 1.png';
@@ -18,6 +19,7 @@ export default function VolunteersAndDonors() {
   const [editVolForm,setEditVolForm]  = useState({});
   const [viewVolApp, setViewVolApp]   = useState(null);
   const [toast,      setToast]        = useState('');
+  const [confirmState, setConfirmState] = useState(null);
   const [volFilter,  setVolFilter]    = useState('');
   const [appFilter,  setAppFilter]    = useState('');
   const [donFilter,  setDonFilter]    = useState('');
@@ -72,15 +74,27 @@ export default function VolunteersAndDonors() {
 
   /* ─── ACTIONS ─── */
   const handleVolStatus = async (id, status) => {
-    try {
-      await API.patch(`/volunteers/applications/${id}/status`, { status });
-      if (status === 'Approved') {
-        const { data } = await API.get('/volunteers');
-        setVolunteers(data);
-      }
-    } catch { /* demo */ }
-    setVolApps(prev => prev.map(a => a.id === id ? { ...a, status } : a));
-    showToast(`Application ${status}`);
+    const apply = async () => {
+      try {
+        await API.patch(`/volunteers/applications/${id}/status`, { status });
+        if (status === 'Approved') {
+          const { data } = await API.get('/volunteers');
+          setVolunteers(data);
+        }
+      } catch { /* demo */ }
+      setVolApps(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+      showToast(`Application ${status}`);
+    };
+
+    if (status === 'Rejected') {
+      setConfirmState({
+        title: 'Are you sure about rejecting?',
+        message: 'This applicant will be notified that their volunteer application was not approved.',
+        onConfirm: apply,
+      });
+      return;
+    }
+    apply();
   };
 
   const handleEditVol = async (e) => {
@@ -91,11 +105,16 @@ export default function VolunteersAndDonors() {
     setEditVol(null);
   };
 
-  const handleDeleteVol = async (vol) => {
-    if (!window.confirm(`Remove ${vol.name} from volunteers?`)) return;
-    try { await API.delete(`/volunteers/${vol.id}`); } catch { /* demo */ }
-    setVolunteers(prev => prev.filter(v => v.id !== vol.id));
-    showToast('Volunteer removed.');
+  const handleDeleteVol = (vol) => {
+    setConfirmState({
+      title: 'Are you sure about removing?',
+      message: `${vol.name} will be removed from the volunteers list. This cannot be undone.`,
+      onConfirm: async () => {
+        try { await API.delete(`/volunteers/${vol.id}`); } catch { /* demo */ }
+        setVolunteers(prev => prev.filter(v => v.id !== vol.id));
+        showToast('Volunteer removed.');
+      },
+    });
   };
 
   const handleAddVol = async (e) => {
@@ -164,6 +183,15 @@ export default function VolunteersAndDonors() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {toast && (
         <div className="toast" style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999 }}>{toast}</div>
+      )}
+
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={() => { confirmState.onConfirm(); setConfirmState(null); }}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
 
       {/* ─── STAT CARDS ─── */}

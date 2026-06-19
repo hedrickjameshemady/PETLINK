@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import { API, useAuth } from '../../context/AuthContext';
+import { ConfirmModal } from '../../components/ConfirmDialog';
 
 const PET_TYPES = ['All', 'Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
 const PET_TYPE_ICONS = { Dog: '🐶', Cat: '🐱', Bird: '🐦', Rabbit: '🐰', Others: '🐾', All: '✨' };
@@ -26,6 +27,7 @@ export default function UserDashboard() {
   const [lfReports, setLfReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lfLoading, setLfLoading] = useState({});
+  const [confirmState, setConfirmState] = useState(null);
 
   // Lost & Found filters
   const [lfSearch, setLfSearch] = useState('');
@@ -45,31 +47,44 @@ export default function UserDashboard() {
 
   useEffect(() => { fetchAll(); }, []);
 
-  const handleStatusChange = async (id, newStatus) => {
-    const confirmMsg =
-      newStatus === 'Reunited'
-        ? 'Mark this report as Reunited? 🐾 This means your pet has been found or the found pet has been returned to its owner.'
-        : newStatus === 'Closed'
-        ? 'Close this report? It will no longer show on the public page.'
-        : `Change status to "${newStatus}"?`;
-    if (!window.confirm(confirmMsg)) return;
-    setLfLoading(p => ({ ...p, [id]: true }));
-    try {
-      if (newStatus === 'Reunited') {
-        await API.patch(`/lostfound/${id}/reunite`);
-      } else if (newStatus === 'Closed') {
-        await API.patch(`/lostfound/${id}/close`);
-      } else if (newStatus === 'Approved') {
-        // re-open: user can't directly approve, so just reload
-        alert('Only an admin can approve reports.');
-        return;
-      }
-      fetchAll();
-    } catch (err) {
-      alert(err?.response?.data?.error || 'Could not update. Make sure the report is approved first.');
-    } finally {
-      setLfLoading(p => ({ ...p, [id]: false }));
+  const handleStatusChange = (id, newStatus) => {
+    if (newStatus === 'Approved') {
+      alert('Only an admin can approve reports.');
+      return;
     }
+
+    const title =
+      newStatus === 'Reunited'
+        ? 'Are you sure about marking this as reunited?'
+        : newStatus === 'Closed'
+        ? 'Are you sure about closing this report?'
+        : `Are you sure about changing the status to "${newStatus}"?`;
+    const message =
+      newStatus === 'Reunited'
+        ? 'This means your pet has been found, or the found pet has been returned to its owner.'
+        : newStatus === 'Closed'
+        ? 'It will no longer show on the public Lost & Found page.'
+        : '';
+
+    setConfirmState({
+      title,
+      message,
+      onConfirm: async () => {
+        setLfLoading(p => ({ ...p, [id]: true }));
+        try {
+          if (newStatus === 'Reunited') {
+            await API.patch(`/lostfound/${id}/reunite`);
+          } else if (newStatus === 'Closed') {
+            await API.patch(`/lostfound/${id}/close`);
+          }
+          fetchAll();
+        } catch (err) {
+          alert(err?.response?.data?.error || 'Could not update. Make sure the report is approved first.');
+        } finally {
+          setLfLoading(p => ({ ...p, [id]: false }));
+        }
+      },
+    });
   };
 
   // Filter + split reports
@@ -199,6 +214,16 @@ export default function UserDashboard() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
+
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={() => { confirmState.onConfirm(); setConfirmState(null); }}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
+
       <main style={{ flex: 1, maxWidth: 1100, margin: '0 auto', width: '100%', padding: '32px' }}>
 
         {/* Welcome */}

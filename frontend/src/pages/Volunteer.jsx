@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { SuccessModal } from '../components/ConfirmDialog';
 
 export default function Volunteer() {
   const { user } = useAuth();
@@ -48,13 +49,15 @@ export default function Volunteer() {
           ))}
         </div>
 
-        {submitted ? (
-          <div style={styles.successBox}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
-            <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 22, marginBottom: 8 }}>Application Submitted!</h2>
-            <p style={{ color: 'var(--text-muted)' }}>Thank you for volunteering! We'll review your application and contact you soon.</p>
-          </div>
-        ) : (
+        {submitted && (
+          <SuccessModal
+            title="Volunteer Registration Complete"
+            message="Thank you for registering as a PETLINK volunteer. Your information has been successfully submitted. We will reach out to you with further details and upcoming volunteer opportunities."
+            onClose={() => setSubmitted(false)}
+          />
+        )}
+
+        {!submitted && (
           <div className="card" style={{ marginTop: 32 }}>
             <h2 style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Volunteer Application Form</h2>
             <form onSubmit={(e) => { e.preventDefault(); if (!user) { navigate('/login'); return; } handleSubmit(e); }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
