@@ -153,10 +153,18 @@ export default function VolunteersAndDonors() {
     return <span className={`badge badge-${map[s] || 'gray'}`}>{s}</span>;
   };
 
-  const avatarCircle = (name, bg = 'var(--green-200)') => (
-    <div style={{ width: 36, height: 36, background: bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)', flexShrink: 0 }}>
-      {(name || '?')[0].toUpperCase()}
-    </div>
+  const avatarCircle = (name, bg = 'var(--green-200)', photo = null) => (
+    photo ? (
+      <img
+        src={`http://localhost:5000${photo}`}
+        alt={name || ''}
+        style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1.5px solid var(--border)' }}
+      />
+    ) : (
+      <div style={{ width: 36, height: 36, background: bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)', flexShrink: 0 }}>
+        {(name || '?')[0].toUpperCase()}
+      </div>
+    )
   );
 
   /* ─── STAT CARD ─── */
@@ -263,7 +271,7 @@ export default function VolunteersAndDonors() {
                 <tr key={v.id}>
                   <td>
                     <div style={s.nameCell}>
-                      {avatarCircle(v.name)}
+                      {avatarCircle(v.name, 'var(--green-200)', v.profile_photo)}
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{v.name}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{v.email}</div>
@@ -319,7 +327,7 @@ export default function VolunteersAndDonors() {
                 <tr key={a.id}>
                   <td>
                     <div style={s.nameCell}>
-                      {avatarCircle(a.name, '#e3f2fd')}
+                      {avatarCircle(a.name, '#e3f2fd', a.profile_photo)}
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{a.name}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{a.email}</div>
@@ -363,18 +371,18 @@ export default function VolunteersAndDonors() {
           </div>
         </div>
         <div style={s.scrollTable}>
-          <table style={{ minWidth: 600 }}>
+          <table style={{ minWidth: 680 }}>
             <thead>
               <tr>
                 <th>NAME / EMAIL</th><th>CONTACT</th><th>TYPE</th>
-                <th>AMOUNT</th><th>DATE</th>
+                <th>AMOUNT</th><th>DATE</th><th>PROOF</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} style={s.empty}>Loading…</td></tr>
+                <tr><td colSpan={6} style={s.empty}>Loading…</td></tr>
               ) : filteredDons.length === 0 ? (
-                <tr><td colSpan={5} style={s.empty}>No donations found.</td></tr>
+                <tr><td colSpan={6} style={s.empty}>No donations found.</td></tr>
               ) : filteredDons.map((d, i) => (
                 <tr key={d.id ?? i}>
                   <td>
@@ -392,6 +400,13 @@ export default function VolunteersAndDonors() {
                     ₱{Number(d.amount ?? 0).toLocaleString()}
                   </td>
                   <td>{d.donated_at ? new Date(d.donated_at).toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—'}</td>
+                  <td>
+                    {d.proof_file ? (
+                      <a href={`http://localhost:5000${d.proof_file}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 13, textDecoration: 'underline' }}>View Proof</a>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -1,102 +1,198 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { SuccessModal } from '../components/ConfirmDialog';
 
+const AVAILABILITY = ['Weekdays', 'Weekends', 'Both', 'Flexible'];
+const ROLES = ['Pet Care', 'Adoption Helper', 'Cleaning', 'Admin Support', 'Fundraising', 'Other'];
+
 export default function Volunteer() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ availability: 'Weekdays', preferred_role: '', motivation: '', experience: '' });
+
+  const [form, setForm] = useState({
+    availability: '',
+    preferred_role: '',
+    motivation: '',
+    experience: '',
+  });
+  const [errors, setErrors] = useState({});
+  const [account, setAccount] = useState(null);     // name/email/phone from user account
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Pull the logged-in user's contact details to display (read-only)
+  useEffect(() => {
+    if (!user) return;
+    API.get('/auth/me')
+      .then(({ data }) => setAccount(data))
+      .catch(() => setAccount(null));
+  }, [user]);
+
+  const setField = (key, value) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    if (errors[key]) setErrors(prev => ({ ...prev, [key]: undefined }));
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!form.availability) e.availability = 'Please select your availability.';
+    if (!form.preferred_role) e.preferred_role = 'Please select a preferred role.';
+    if (!form.motivation.trim()) e.motivation = 'Please tell us why you want to volunteer.';
+    else if (form.motivation.trim().length < 15) e.motivation = 'Please write at least 15 characters.';
+    // Experience is optional, but if filled, keep it reasonable
+    if (form.experience && form.experience.trim().length > 1000) e.experience = 'Please keep this under 1000 characters.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async () => {
     if (!user) { navigate('/login'); return; }
-    if (!user) { navigate('/login'); return; }
+    if (!validate()) return;
 
     try {
       setLoading(true);
-      await API.post('/volunteers/apply', form);
+      await API.post('/volunteers/apply', {
+        availability: form.availability,
+        preferred_role: form.preferred_role,
+        motivation: form.motivation.trim(),
+        experience: form.experience.trim(),
+      });
       setSubmitted(true);
-    } catch {
-      setSubmitted(true); // demo fallback
-    } finally { setLoading(false); }
+    } catch (err) {
+      // If the server rejects (e.g. already applied), show the message
+      const msg = err.response?.data?.error;
+      if (msg) {
+        setErrors(prev => ({ ...prev, _server: msg }));
+      } else {
+        setSubmitted(true); // demo fallback when backend unreachable
+      }
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const inputStyle = (key) => ({
+    ...styles.input,
+    borderColor: errors[key] ? '#dc3545' : 'var(--border)',
+  });
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
-      <main style={{ flex: 1, maxWidth: 760, margin: '0 auto', width: '100%', padding: '40px 32px' }}>
-        <h1 style={styles.title}>Become a Volunteer</h1>
-        <p style={styles.subtitle}>Join our team and make a difference in the lives of shelter animals. We need dedicated volunteers for various roles.</p>
+      <main style={styles.main}>
+        <h1 style={styles.title}>Volunteer Registration</h1>
 
-        {/* Roles */}
-        <div style={styles.rolesGrid}>
-          {[
-            { icon: '🐾', role: 'Pet Care', desc: 'Feed, groom, and socialize animals.' },
-            { icon: '🏠', role: 'Adoption Helper', desc: 'Assist with adoption screenings and meet & greets.' },
-            { icon: '🧹', role: 'Cleaning', desc: 'Keep the shelter clean and sanitary.' },
-            { icon: '📋', role: 'Admin Support', desc: 'Handle paperwork and data entry.' },
-          ].map(r => (
-            <div key={r.role} style={styles.roleCard}>
-              <span style={{ fontSize: 28, marginBottom: 8, display: 'block' }}>{r.icon}</span>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{r.role}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{r.desc}</div>
-            </div>
-          ))}
+        {/* Info banner */}
+        <div style={styles.infoBanner}>
+          <span style={styles.infoIcon}>ⓘ</span>
+          <p style={styles.infoText}>
+            This page is for individuals who wish to register as volunteers. Please complete the form
+            with your details. Required fields are marked with an asterisk (<span style={{ color: '#dc3545' }}>*</span>).
+            Make sure everything is accurate before submitting — error messages will appear if any required
+            information is missing.
+          </p>
         </div>
 
         {submitted && (
           <SuccessModal
             title="Volunteer Registration Complete"
-            message="Thank you for registering as a PETLINK volunteer. Your information has been successfully submitted. We will reach out to you with further details and upcoming volunteer opportunities."
-            onClose={() => setSubmitted(false)}
+            message="Thank you for registering as a PETLINK volunteer. Your application has been submitted. Our team will review it and reach out with next steps."
+            onClose={() => { setSubmitted(false); navigate('/'); }}
           />
         )}
 
         {!submitted && (
-          <div className="card" style={{ marginTop: 32 }}>
-            <h2 style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Volunteer Application Form</h2>
-            <form onSubmit={(e) => { e.preventDefault(); if (!user) { navigate('/login'); return; } handleSubmit(e); }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <div className="form-group">
-                  <label className="form-label">Availability</label>
-                  <select className="form-select" value={form.availability} onChange={e => setForm({ ...form, availability: e.target.value })}>
-                    {['Weekdays','Weekends','Both','Flexible'].map(a => <option key={a}>{a}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Preferred Role</label>
-                  <select className="form-select" value={form.preferred_role} onChange={e => setForm({ ...form, preferred_role: e.target.value })} required>
-                    <option value="">Select a role...</option>
-                    {['Pet Care','Adoption Helper','Cleaning','Admin Support','Fundraising','Other'].map(r => <option key={r}>{r}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Experience with Animals</label>
-                <textarea className="form-textarea" placeholder="Tell us about any experience you have with animals..." value={form.experience} onChange={e => setForm({ ...form, experience: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Why do you want to volunteer?</label>
-                <textarea className="form-textarea" placeholder="Share your motivation..." value={form.motivation} onChange={e => setForm({ ...form, motivation: e.target.value })} required />
-              </div>
+          <div style={styles.formWrap}>
+            {errors._server && (
+              <div style={styles.serverError}>{errors._server}</div>
+            )}
+
+            {/* Read-only account info (from the logged-in user) */}
+            <Field label="Name" required>
+              <input
+                style={{ ...styles.input, background: '#f9fafb', color: 'var(--text-muted)' }}
+                value={account ? `${account.first_name} ${account.last_name}` : (user ? user.first_name : '')}
+                placeholder="e.g. Alex Manaloto"
+                readOnly
+              />
+              {!user && <span style={styles.hint}>Please log in to auto-fill your details.</span>}
+            </Field>
+
+            <Field label="Contact" required>
+              <input
+                style={{ ...styles.input, background: '#f9fafb', color: 'var(--text-muted)' }}
+                value={account?.phone || ''}
+                placeholder="e.g. 09589473648"
+                readOnly
+              />
+              {account && !account.phone && (
+                <span style={styles.hint}>No phone on file — add one in your Profile so we can reach you.</span>
+              )}
+            </Field>
+
+            <Field label="Email" required>
+              <input
+                style={{ ...styles.input, background: '#f9fafb', color: 'var(--text-muted)' }}
+                value={account?.email || ''}
+                placeholder="e.g. Alex@gmail.com"
+                readOnly
+              />
+            </Field>
+
+            {/* Editable fields that actually save */}
+            <Field label="Availability" required error={errors.availability}>
+              <select
+                style={inputStyle('availability')}
+                value={form.availability}
+                onChange={e => setField('availability', e.target.value)}
+              >
+                <option value="">Select Availability</option>
+                {AVAILABILITY.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </Field>
+
+            <Field label="Preferred Role" required error={errors.preferred_role}>
+              <select
+                style={inputStyle('preferred_role')}
+                value={form.preferred_role}
+                onChange={e => setField('preferred_role', e.target.value)}
+              >
+                <option value="">Select Preferred Role</option>
+                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </Field>
+
+            <Field label="Why do you want to volunteer?" required error={errors.motivation}>
+              <textarea
+                style={{ ...inputStyle('motivation'), minHeight: 90, resize: 'vertical' }}
+                placeholder="Share what motivates you to help shelter animals..."
+                value={form.motivation}
+                onChange={e => setField('motivation', e.target.value)}
+              />
+            </Field>
+
+            <Field label="Experience" error={errors.experience}>
+              <textarea
+                style={{ ...inputStyle('experience'), minHeight: 120, resize: 'vertical' }}
+                placeholder="Tell us about any experience you have with animals (optional)..."
+                value={form.experience}
+                onChange={e => setField('experience', e.target.value)}
+              />
+            </Field>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
               <button
-  type="button"
-  className="btn btn-primary"
-  style={{ alignSelf: 'flex-start', padding: '12px 32px' }}
-  disabled={loading}
-  onClick={(e) => {
-    if (!user) { navigate('/login'); return; }
-    handleSubmit(e);
-  }}
->
-  {loading ? 'Submitting...' : 'Submit Application'}
-</button>
-            </form>
+                className="btn btn-primary"
+                style={{ padding: '11px 34px' }}
+                disabled={loading}
+                onClick={handleSubmit}
+              >
+                {loading ? 'Submitting...' : 'Submit'}
+              </button>
+            </div>
           </div>
         )}
       </main>
@@ -105,10 +201,40 @@ export default function Volunteer() {
   );
 }
 
+function Field({ label, required, error, children }) {
+  return (
+    <div style={styles.field}>
+      <label style={styles.label}>
+        {label}{required && <span style={{ color: '#dc3545', marginLeft: 3 }}>*</span>}
+      </label>
+      {children}
+      {error && <span style={styles.error}>{error}</span>}
+    </div>
+  );
+}
+
 const styles = {
-  title: { fontFamily: "'Fraunces',serif", fontSize: 32, fontWeight: 700, marginBottom: 10 },
-  subtitle: { color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.6, marginBottom: 28 },
-  rolesGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 },
-  roleCard: { background: 'var(--green-50)', border: '1.5px solid var(--green-200)', borderRadius: 'var(--radius-md)', padding: '18px 16px', textAlign: 'center' },
-  successBox: { background: 'var(--green-50)', border: '2px solid var(--green-200)', borderRadius: 'var(--radius-xl)', padding: '48px 32px', textAlign: 'center', marginTop: 32 },
+  main: { flex: 1, maxWidth: 820, margin: '0 auto', width: '100%', padding: '32px 32px 60px' },
+  title: { fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 700, marginBottom: 20, color: 'var(--text-dark)' },
+  infoBanner: {
+    display: 'flex', gap: 12, alignItems: 'flex-start',
+    background: '#f6f8fa', border: '1px solid var(--border)', borderRadius: 10,
+    padding: '14px 18px', marginBottom: 32,
+  },
+  infoIcon: { color: 'var(--primary)', fontSize: 18, flexShrink: 0, lineHeight: 1.4 },
+  infoText: { fontSize: 13.5, color: 'var(--text-mid)', lineHeight: 1.6, margin: 0 },
+  formWrap: { maxWidth: 640, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 22 },
+  field: { display: 'flex', flexDirection: 'column', gap: 7 },
+  label: { fontSize: 15, fontWeight: 600, color: 'var(--text-dark)' },
+  input: {
+    width: '100%', border: '1.5px solid var(--border)', borderRadius: 8,
+    padding: '12px 16px', fontSize: 14, fontFamily: 'inherit', color: 'var(--text-dark)',
+    outline: 'none', boxSizing: 'border-box', background: 'white',
+  },
+  error: { fontSize: 12.5, color: '#dc3545', marginTop: 1 },
+  hint: { fontSize: 12.5, color: 'var(--text-muted)', marginTop: 1 },
+  serverError: {
+    background: '#fdecea', border: '1px solid #f5c2c0', color: '#b71c1c',
+    borderRadius: 8, padding: '12px 16px', fontSize: 13.5,
+  },
 };

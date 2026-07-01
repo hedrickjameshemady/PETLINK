@@ -264,7 +264,15 @@ export default function PetsAndAdoptions() {
     <tr key={app.id}>
       <td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={styles.avatarCircle}>{(app.full_name || app.applicant_name || app.name || 'U')[0]}</div>
+          {app.applicant_photo ? (
+            <img
+              src={`http://localhost:5000${app.applicant_photo}`}
+              alt={app.applicant_name || 'Applicant'}
+              style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1.5px solid var(--border)' }}
+            />
+          ) : (
+            <div style={styles.avatarCircle}>{(app.full_name || app.applicant_name || app.name || 'U')[0]}</div>
+          )}
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{app.full_name || app.applicant_name || app.name}</div>
             <div style={{ fontSize: 12, color: 'var(--primary)' }}>{app.email || app.applicant_email}</div>

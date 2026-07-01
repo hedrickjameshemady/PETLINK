@@ -1,8 +1,20 @@
 const express = require('express');
 const db = require('../config/db');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
+
+// Storage for donation proof-of-payment files
+const proofDir = path.join(__dirname, '../uploads/donations');
+if (!fs.existsSync(proofDir)) fs.mkdirSync(proofDir, { recursive: true });
+const proofStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, proofDir),
+  filename: (req, file, cb) => cb(null, `proof_${Date.now()}${path.extname(file.originalname)}`),
+});
+const uploadProof = multer({ storage: proofStorage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ================== VOLUNTEERS ==================
 
@@ -148,19 +160,26 @@ router.get('/donations', authMiddleware, adminMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/donations', async (req, res) => {
+router.post('/donations', uploadProof.single('proof'), async (req, res) => {
   try {
     const { donor_id, donor_name, donor_email, donor_phone, type, amount, purpose, message, campaign_id } = req.body;
+
+    // Basic server-side guard: amount must be a positive number
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return res.status(400).json({ error: 'A valid donation amount is required.' });
+
+    const proofUrl = req.file ? `/uploads/donations/${req.file.filename}` : null;
+
     const [result] = await db.query(
-      'INSERT INTO donations (donor_id, donor_name, donor_email, donor_phone, type, amount, purpose, message, campaign_id) VALUES (?,?,?,?,?,?,?,?,?)',
-      [donor_id || null, donor_name, donor_email, donor_phone, type || 'Individual', amount, purpose, message, campaign_id || null]
+      'INSERT INTO donations (donor_id, donor_name, donor_email, donor_phone, type, amount, purpose, message, campaign_id, proof_file) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [donor_id || null, donor_name || null, donor_email || null, donor_phone || null, type || 'Individual', amt, purpose || null, message || null, campaign_id || null, proofUrl]
     );
 
     // If a campaign was selected, add the donation amount to its raised_amount
     if (campaign_id) {
       await db.query(
         'UPDATE campaigns SET raised_amount = raised_amount + ? WHERE id = ?',
-        [amount, campaign_id]
+        [amt, campaign_id]
       );
     }
 
