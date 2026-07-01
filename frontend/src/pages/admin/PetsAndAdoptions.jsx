@@ -15,6 +15,12 @@ export default function PetsAndAdoptions() {
   const [editPhotoPreview, setEditPhotoPreview] = useState(null);
   const [viewApp, setViewApp] = useState(null);
   const [viewPet, setViewPet] = useState(null);
+  const [viewProfile, setViewProfile] = useState(null);      // full applicant profile
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [adopted, setAdopted] = useState([]);                // adopted pets + adopter info
+  const [monitorApp, setMonitorApp] = useState(null);        // adoption being monitored
+  const [followups, setFollowups] = useState([]);
+  const [followForm, setFollowForm] = useState({ followup_date: '', outcome: 'Doing Well', notes: '' });
   const [toast, setToast] = useState('');
   const [confirmState, setConfirmState] = useState(null);
   const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [] });
@@ -27,14 +33,16 @@ export default function PetsAndAdoptions() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [p, a, as] = await Promise.all([
+      const [p, a, as, ad] = await Promise.all([
         API.get('/pets/all').catch(() => ({ data: DEMO_PETS })),
         API.get('/adoptions').catch(() => ({ data: DEMO_APPS })),
         API.get('/pets/assessments').catch(() => ({ data: DEMO_ASSESSMENTS })),
+        API.get('/adoptions/adopted').catch(() => ({ data: [] })),
       ]);
       setPets(p.data);
       setApplications(a.data);
       setAssessments(as.data);
+      setAdopted(ad.data);
     } finally { setLoading(false); }
   };
 
@@ -67,6 +75,44 @@ export default function PetsAndAdoptions() {
     setPetPhotoPreview(null);
   };
 
+  const openProfile = async (userId) => {
+    if (!userId) { showToast('No linked profile for this applicant'); return; }
+    try {
+      setLoadingProfile(true);
+      const { data } = await API.get(`/auth/users/${userId}`);
+      setViewProfile(data);
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to load profile');
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  const openMonitor = async (row) => {
+    setMonitorApp(row);
+    setFollowForm({ followup_date: new Date().toISOString().slice(0, 10), outcome: 'Doing Well', notes: '' });
+    try {
+      const { data } = await API.get(`/adoptions/${row.application_id}/followups`);
+      setFollowups(data);
+    } catch { setFollowups([]); }
+  };
+
+  const submitFollowup = async () => {
+    if (!followForm.followup_date) { showToast('Please pick a date', true); return; }
+    try {
+      await API.post(`/adoptions/${monitorApp.application_id}/followups`, followForm);
+      const { data } = await API.get(`/adoptions/${monitorApp.application_id}/followups`);
+      setFollowups(data);
+      setFollowForm({ followup_date: new Date().toISOString().slice(0, 10), outcome: 'Doing Well', notes: '' });
+      setAdopted(prev => prev.map(a => a.application_id === monitorApp.application_id
+        ? { ...a, followup_count: (a.followup_count || 0) + 1, last_followup: followForm.followup_date }
+        : a));
+      showToast('Follow-up recorded');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to save follow-up', true);
+    }
+  };
+
   const handleStatus = async (appId, status) => {
     const apply = async () => {
       try {
@@ -74,6 +120,7 @@ export default function PetsAndAdoptions() {
       } catch { /* demo */ }
       setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
       showToast(`Application ${status}`);
+      if (status === 'Approved') fetchAll();
     };
 
     if (status === 'Rejected') {
@@ -177,7 +224,6 @@ export default function PetsAndAdoptions() {
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
 
   const activePets = pets.filter(p => p.status !== 'Adopted').sort((a, b) => a.pet_id.localeCompare(b.pet_id));
-const finishedPets = pets.filter(p => p.status === 'Adopted').sort((a, b) => a.pet_id.localeCompare(b.pet_id));
   const pendingApps = applications.filter(a => a.status === 'Pending Review');
   const finishedApps = applications.filter(a => a.status !== 'Pending Review');
 
@@ -276,14 +322,37 @@ const finishedPets = pets.filter(p => p.status === 'Adopted').sort((a, b) => a.p
             </tbody>
           </table>
         </div>
-        <div style={{ ...styles.subLabel, marginTop: 24 }}>Adopted Pets</div>
+        <div style={{ ...styles.subLabel, marginTop: 24 }}>Adopted Pets — Post-Adoption Monitoring</div>
         <div style={styles.scrollTable}>
           <table>
-            <thead><tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>HEALTH</th><th>STATUS</th><th></th></tr></thead>
+            <thead><tr><th>PET</th><th>ADOPTER</th><th>ADOPTED ON</th><th>FOLLOW-UPS</th><th></th></tr></thead>
             <tbody>
-              {finishedPets.length === 0
-                ? <tr><td colSpan={7} style={styles.emptyCell}>No adopted pets yet.</td></tr>
-                : finishedPets.map(petRow)}
+              {adopted.length === 0
+                ? <tr><td colSpan={5} style={styles.emptyCell}>No adopted pets yet.</td></tr>
+                : adopted.map(row => (
+                  <tr key={row.application_id}>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{row.pet_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{row.pet_breed} • {row.pet_code}</div>
+                    </td>
+                    <td>
+                      <button style={{ ...styles.linkBtn, fontWeight: 600 }} onClick={() => openProfile(row.applicant_id)}>
+                        {row.adopter_name}
+                      </button>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{row.adopter_email}</div>
+                    </td>
+                    <td>{row.adopted_at ? new Date(row.adopted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}</td>
+                    <td>
+                      {row.followup_count > 0
+                        ? <span className="badge badge-green">{row.followup_count} logged</span>
+                        : <span className="badge badge-yellow">None yet</span>}
+                      {row.last_followup && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Last: {new Date(row.last_followup).toLocaleDateString()}</div>}
+                    </td>
+                    <td>
+                      <button style={styles.linkBtn} onClick={() => openMonitor(row)}>Monitor</button>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
@@ -578,7 +647,7 @@ const finishedPets = pets.filter(p => p.status === 'Adopted').sort((a, b) => a.p
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4, marginBottom: 4 }}>
                 <button type="submit" className="btn btn-primary" style={{ minWidth: 120, margin: 0 }}>Add</button>
               </div>
-              
+
             </form>
           </div>
         </div>
@@ -619,47 +688,50 @@ const finishedPets = pets.filter(p => p.status === 'Adopted').sort((a, b) => a.p
               <div style={{ borderTop: '1.5px solid #e5e7eb', paddingTop: 14, marginTop: 4 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-dark)', marginBottom: 10 }}>🏥 Medical Records</div>
 
-                {/* Neutered status */}
-                <div style={styles.detailRow}>
-                  <span style={styles.detailLbl}>Neutered / Spayed</span>
-                  {viewPet.neutered ? (
-                    <span>
-                      <span className="badge badge-blue">✂️ Yes</span>
-                      {viewPet.neutered_date && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>{new Date(viewPet.neutered_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
-                    </span>
-                  ) : (
-                    <span className="badge badge-gray">Not Neutered</span>
-                  )}
-                </div>
-
-                {/* Vaccination status + log */}
-                <div style={styles.detailRow}>
-                  <span style={styles.detailLbl}>Vaccinated</span>
-                  {viewPet.vaccination_status ? (
-                    <span className="badge badge-green">💉 Yes</span>
-                  ) : (
-                    <span className="badge badge-gray">Not Vaccinated</span>
-                  )}
-                </div>
-                {viewPet.vaccination_status && (() => {
+                {!viewPet.neutered && !viewPet.vaccination_status && !viewPet.vet_name && !viewPet.clinic_name && !viewPet.last_checkup_date && !viewPet.medical_notes && (() => {
                   let log = []; try { log = viewPet.vaccine_log ? (typeof viewPet.vaccine_log === 'string' ? JSON.parse(viewPet.vaccine_log) : viewPet.vaccine_log) : []; } catch {}
-                  return log.length > 0 ? (
-                    <div style={{ marginBottom: 10, marginLeft: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Vaccination Log</div>
-                      {log.map((v, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 12, fontSize: 13, paddingBottom: 4, borderBottom: '1px solid #f3f4f6', marginBottom: 4 }}>
-                          <span style={{ fontWeight: 500, flex: 1 }}>{v.name}</span>
-                          <span style={{ color: 'var(--text-muted)' }}>{v.date ? new Date(v.date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null;
-                })()}
-
-                {!viewPet.vet_name && !viewPet.clinic_name && !viewPet.last_checkup_date && !viewPet.medical_notes ? (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>No other medical records yet.</div>
+                  return log.length === 0;
+                })() ? (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>No medical records yet.</div>
                 ) : (
                   <>
+                    {/* Neutered status */}
+                    <div style={styles.detailRow}>
+                      <span style={styles.detailLbl}>Neutered / Spayed</span>
+                      {viewPet.neutered ? (
+                        <span>
+                          <span className="badge badge-blue">✂️ Yes</span>
+                          {viewPet.neutered_date && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>{new Date(viewPet.neutered_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
+                        </span>
+                      ) : (
+                        <span className="badge badge-gray">Not Neutered</span>
+                      )}
+                    </div>
+
+                    {/* Vaccination status + log */}
+                    <div style={styles.detailRow}>
+                      <span style={styles.detailLbl}>Vaccinated</span>
+                      {viewPet.vaccination_status ? (
+                        <span className="badge badge-green">💉 Yes</span>
+                      ) : (
+                        <span className="badge badge-gray">Not Vaccinated</span>
+                      )}
+                    </div>
+                    {viewPet.vaccination_status && (() => {
+                      let log = []; try { log = viewPet.vaccine_log ? (typeof viewPet.vaccine_log === 'string' ? JSON.parse(viewPet.vaccine_log) : viewPet.vaccine_log) : []; } catch {}
+                      return log.length > 0 ? (
+                        <div style={{ marginBottom: 10, marginLeft: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Vaccination Log</div>
+                          {log.map((v, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 12, fontSize: 13, paddingBottom: 4, borderBottom: '1px solid #f3f4f6', marginBottom: 4 }}>
+                              <span style={{ fontWeight: 500, flex: 1 }}>{v.name}</span>
+                              <span style={{ color: 'var(--text-muted)' }}>{v.date ? new Date(v.date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
+
                     {viewPet.vet_name && <div style={styles.detailRow}><span style={styles.detailLbl}>Veterinarian</span><span>{viewPet.vet_name}</span></div>}
                     {viewPet.clinic_name && <div style={styles.detailRow}><span style={styles.detailLbl}>Clinic</span><span>{viewPet.clinic_name}</span></div>}
                     {viewPet.last_checkup_date && <div style={styles.detailRow}><span style={styles.detailLbl}>Last Checkup</span><span>{new Date(viewPet.last_checkup_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span></div>}
@@ -685,7 +757,26 @@ const finishedPets = pets.filter(p => p.status === 'Adopted').sort((a, b) => a.p
               <button className="modal-close" onClick={() => setViewApp(null)}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
-              <div style={styles.detailRow}><span style={styles.detailLbl}>Applicant</span><span>{viewApp.full_name || viewApp.applicant_name || viewApp.name}</span></div>
+              {/* Applicant header with photo + link to full profile */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
+                <img
+                  src={viewApp.applicant_photo
+                    ? `http://localhost:5000${viewApp.applicant_photo}`
+                    : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(viewApp.applicant_name || viewApp.full_name || 'User') + '&background=e5e7eb&color=374151'}
+                  alt="Applicant"
+                  style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>{viewApp.full_name || viewApp.applicant_name || viewApp.name}</div>
+                  <button
+                    onClick={() => openProfile(viewApp.applicant_id)}
+                    disabled={loadingProfile}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                  >
+                    {loadingProfile ? 'Loading…' : 'View Full Profile'}
+                  </button>
+                </div>
+              </div>
               <div style={styles.detailRow}><span style={styles.detailLbl}>Email</span><span>{viewApp.email || viewApp.applicant_email}</span></div>
               {viewApp.phone && <div style={styles.detailRow}><span style={styles.detailLbl}>Phone</span><span>{viewApp.phone}</span></div>}
               {viewApp.address && <div style={styles.detailRow}><span style={styles.detailLbl}>Address</span><span>{viewApp.address}</span></div>}
@@ -708,7 +799,113 @@ const finishedPets = pets.filter(p => p.status === 'Adopted').sort((a, b) => a.p
           </div>
         </div>
       )}
-{/* ─── EDIT PET MODAL ─── */}
+
+      {/* ─── APPLICANT PROFILE MODAL (read-only, admin vetting) ─── */}
+      {viewProfile && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewProfile(null)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2 className="modal-title">Applicant Profile</h2>
+              <button className="modal-close" onClick={() => setViewProfile(null)}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 14, borderBottom: '1px solid #f0f0f0' }}>
+                <img
+                  src={viewProfile.profile_photo
+                    ? `http://localhost:5000${viewProfile.profile_photo}`
+                    : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(`${viewProfile.first_name} ${viewProfile.last_name}`) + '&background=e5e7eb&color=374151&size=200'}
+                  alt="Applicant"
+                  style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{viewProfile.first_name} {viewProfile.last_name}</div>
+                  <span className="badge badge-blue" style={{ textTransform: 'capitalize', marginTop: 4, display: 'inline-block' }}>{viewProfile.role}</span>
+                </div>
+              </div>
+              <div style={styles.detailRow}><span style={styles.detailLbl}>Email</span><span>{viewProfile.email}</span></div>
+              {viewProfile.phone && <div style={styles.detailRow}><span style={styles.detailLbl}>Phone</span><span>{viewProfile.phone}</span></div>}
+              {viewProfile.address && <div style={styles.detailRow}><span style={styles.detailLbl}>Address</span><span>{viewProfile.address}</span></div>}
+              {viewProfile.city && <div style={styles.detailRow}><span style={styles.detailLbl}>City</span><span>{viewProfile.city}</span></div>}
+              {viewProfile.province && <div style={styles.detailRow}><span style={styles.detailLbl}>Province</span><span>{viewProfile.province}</span></div>}
+              {viewProfile.created_at && (
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLbl}>Member Since</span>
+                  <span>{new Date(viewProfile.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline btn-sm" onClick={() => setViewProfile(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── POST-ADOPTION MONITORING MODAL ─── */}
+      {monitorApp && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setMonitorApp(null)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2 className="modal-title">Monitor — {monitorApp.pet_name}</h2>
+              <button className="modal-close" onClick={() => setMonitorApp(null)}>✕</button>
+            </div>
+
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+              Adopted by <strong style={{ color: 'var(--text-dark)' }}>{monitorApp.adopter_name}</strong>
+              {monitorApp.adopted_at && <> on {new Date(monitorApp.adopted_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</>}
+              {' · '}
+              <button onClick={() => openProfile(monitorApp.applicant_id)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: 13 }}>View profile</button>
+            </div>
+
+            {/* Add follow-up form */}
+            <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Record a check-in</div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+                <input type="date" className="form-input" style={{ flex: 1, minWidth: 140 }}
+                  value={followForm.followup_date}
+                  onChange={e => setFollowForm({ ...followForm, followup_date: e.target.value })} />
+                <select className="form-select" style={{ flex: 1, minWidth: 140 }}
+                  value={followForm.outcome}
+                  onChange={e => setFollowForm({ ...followForm, outcome: e.target.value })}>
+                  <option>Doing Well</option>
+                  <option>Needs Attention</option>
+                  <option>Unable to Reach</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <textarea className="form-textarea" placeholder="Notes (how is the pet settling in, any concerns...)"
+                value={followForm.notes}
+                onChange={e => setFollowForm({ ...followForm, notes: e.target.value })} />
+              <button className="btn btn-primary btn-sm" style={{ marginTop: 10 }} onClick={submitFollowup}>Add Follow-up</button>
+            </div>
+
+            {/* Follow-up history */}
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>History</div>
+            {followups.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>No follow-ups recorded yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 240, overflowY: 'auto' }}>
+                {followups.map(f => (
+                  <div key={f.id} style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{new Date(f.followup_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                      <span className={`badge badge-${f.outcome === 'Doing Well' ? 'green' : f.outcome === 'Needs Attention' ? 'yellow' : 'gray'}`}>{f.outcome}</span>
+                    </div>
+                    {f.notes && <p style={{ fontSize: 13, color: 'var(--text-mid)', margin: '4px 0 0', lineHeight: 1.5 }}>{f.notes}</p>}
+                    {f.admin_name && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Logged by {f.admin_name}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline btn-sm" onClick={() => setMonitorApp(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── EDIT PET MODAL ─── */}
       {editPet && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditPet(null)}>
           <div className="modal" style={{ maxWidth: 560, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>

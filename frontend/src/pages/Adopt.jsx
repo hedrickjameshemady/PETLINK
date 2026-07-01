@@ -128,7 +128,7 @@ export default function Adopt() {
               <div style={styles.grid}>
                 {grouped[type].map((pet, i) => {
                   const photo = pet.photo ? pet.photo : PET_PHOTOS[i % PET_PHOTOS.length];
-                  const isPending = pet.status === 'Pending';
+                  const isPending = !!pet.my_pending;
                   return (
                     <div key={pet.id} style={styles.petCard}>
                       <div style={{ position: 'relative' }}>

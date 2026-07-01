@@ -108,23 +108,32 @@ export default function PetDetail() {
             <div style={styles.medCard}>
               <div style={styles.medTitle}>🏥 Medical Records</div>
 
-              {/* Neutered */}
-              <div style={styles.medRow}>
-                <span style={styles.medLabel}>Neutered / Spayed</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  {pet.neutered
-                    ? <><span className="badge badge-blue">✂️ Yes</span>{pet.neutered_date && <span style={styles.medDate}>{new Date(pet.neutered_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}</>
-                    : <span className="badge badge-gray">Not Neutered</span>}
-                </span>
-              </div>
+              {/* Has any medical info been recorded at all? */}
+              {(!pet.neutered && !pet.vaccination_status && !pet.vet_name && !pet.clinic_name && !pet.last_checkup_date && !pet.medical_notes && vaccineLog.length === 0) ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '6px 0' }}>
+                  No medical records yet.
+                </div>
+              ) : (
+                <>
+                  {/* Neutered */}
+                  <div style={styles.medRow}>
+                    <span style={styles.medLabel}>Neutered / Spayed</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {pet.neutered
+                        ? <><span className="badge badge-blue">✂️ Yes</span>{pet.neutered_date && <span style={styles.medDate}>{new Date(pet.neutered_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}</>
+                        : <span className="badge badge-gray">Not Neutered</span>}
+                    </span>
+                  </div>
 
-              {/* Vaccinated */}
-              <div style={styles.medRow}>
-                <span style={styles.medLabel}>Vaccinated</span>
-                {pet.vaccination_status
-                  ? <span className="badge badge-green">💉 Yes</span>
-                  : <span className="badge badge-gray">Not Vaccinated</span>}
-              </div>
+                  {/* Vaccinated */}
+                  <div style={styles.medRow}>
+                    <span style={styles.medLabel}>Vaccinated</span>
+                    {pet.vaccination_status
+                      ? <span className="badge badge-green">💉 Yes</span>
+                      : <span className="badge badge-gray">Not Vaccinated</span>}
+                  </div>
+                </>
+              )}
 
               {/* Vaccine log */}
               {pet.vaccination_status && vaccineLog.length > 0 && (
@@ -163,7 +172,7 @@ export default function PetDetail() {
 
             <div style={styles.badges}>
               <span className={`badge badge-${pet.health_status === 'Excellent' ? 'green' : pet.health_status === 'Good' ? 'blue' : 'yellow'}`}>{pet.health_status}</span>
-              <span className={`badge badge-${pet.status === 'Available' ? 'green' : pet.status === 'Pending' ? 'yellow' : 'gray'}`}>{pet.status}</span>
+              <span className={`badge badge-${pet.my_pending ? 'yellow' : pet.status === 'Available' ? 'green' : 'gray'}`}>{pet.my_pending ? 'Pending' : pet.status}</span>
             </div>
 
             <div style={styles.detailGrid}>
@@ -178,13 +187,19 @@ export default function PetDetail() {
             {pet.description && <p style={styles.desc}>{pet.description}</p>}
 
             {pet.status === 'Available' && (
-              <button
-                onClick={handleApplyClick}
-                className="btn btn-primary"
-                style={{ marginTop: 20, width: '100%', justifyContent: 'center' }}
-              >
-                ♡ Apply for Adoption
-              </button>
+              pet.my_pending ? (
+                <button className="btn btn-outline" disabled style={{ marginTop: 20, width: '100%', justifyContent: 'center' }}>
+                  ⏳ Application Pending
+                </button>
+              ) : (
+                <button
+                  onClick={handleApplyClick}
+                  className="btn btn-primary"
+                  style={{ marginTop: 20, width: '100%', justifyContent: 'center' }}
+                >
+                  ♡ Apply for Adoption
+                </button>
+              )
             )}
           </div>
         </div>

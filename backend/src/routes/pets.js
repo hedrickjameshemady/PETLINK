@@ -7,6 +7,18 @@ const fs = require('fs');
 
 const router = express.Router();
 
+// Reads the logged-in user if a valid token is present, but never blocks anonymous access.
+const jwt = require('jsonwebtoken');
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    try {
+      req.user = jwt.verify(header.split(' ')[1], process.env.JWT_SECRET || 'petlink_secret');
+    } catch { /* invalid token → treat as anonymous */ }
+  }
+  next();
+}
+
 const uploadDir = path.join(__dirname, '../uploads/pets');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -17,23 +29,34 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 
-// Get all pets (public)
-router.get('/', async (req, res) => {
+// Get all pets (public) — includes per-user "my_pending" flag when logged in
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { status, type, search } = req.query;
-    let query;
     const params = [];
+    const userId = req.user ? req.user.id : 0;
+
+    // Subquery: does THIS user have a pending application on this pet?
+    let query = `
+      SELECT p.*,
+        EXISTS(
+          SELECT 1 FROM adoption_applications aa
+          WHERE aa.pet_id = p.id AND aa.applicant_id = ? AND aa.status = 'Pending Review'
+        ) AS my_pending
+      FROM pets p
+      WHERE `;
+    params.push(userId);
 
     if (status && status !== 'All Status') {
-      query = 'SELECT * FROM pets WHERE status = ?';
+      query += 'p.status = ?';
       params.push(status);
     } else {
-      query = "SELECT * FROM pets WHERE status != 'Adopted'";
+      query += "p.status != 'Adopted'";
     }
 
-    if (type) { query += ' AND type = ?'; params.push(type); }
-    if (search) { query += ' AND (name LIKE ? OR breed LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
-    query += ' ORDER BY created_at DESC';
+    if (type) { query += ' AND p.type = ?'; params.push(type); }
+    if (search) { query += ' AND (p.name LIKE ? OR p.breed LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+    query += ' ORDER BY p.created_at DESC';
 
     const [rows] = await db.query(query, params);
     res.json(rows);
@@ -62,10 +85,19 @@ router.get('/assessments', authMiddleware, adminMiddleware, async (req, res) => 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Get single pet with its latest assessment
-router.get('/:id', async (req, res) => {
+// Get single pet with its latest assessment + per-user pending flag
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM pets WHERE id = ?', [req.params.id]);
+    const userId = req.user ? req.user.id : 0;
+    const [rows] = await db.query(
+      `SELECT p.*,
+        EXISTS(
+          SELECT 1 FROM adoption_applications aa
+          WHERE aa.pet_id = p.id AND aa.applicant_id = ? AND aa.status = 'Pending Review'
+        ) AS my_pending
+       FROM pets p WHERE p.id = ?`,
+      [userId, req.params.id]
+    );
     if (rows.length === 0) return res.status(404).json({ error: 'Pet not found' });
 
     const [assessments] = await db.query(

@@ -21,6 +21,7 @@ import CommunityAndCampaigns from './pages/admin/CommunityAndCampaigns';
 import AdminLostAndFound from './pages/admin/AdminLostAndFound';
 
 import UserDashboard from './pages/user/UserDashboard';
+import Profile from './pages/Profile';
 
 function GuestOnly({ children }) {
   const { user, loading } = useAuth();
@@ -72,6 +73,9 @@ export default function App() {
 
           {/* User dashboard */}
           <Route path="/dashboard" element={<ProtectedUser><UserDashboard /></ProtectedUser>} />
+
+          {/* Profile — any logged-in user (including admin/staff) */}
+          <Route path="/profile" element={<Profile />} />
 
           {/* Admin panel */}
           <Route path="/admin" element={<ProtectedAdmin><AdminLayout /></ProtectedAdmin>}>

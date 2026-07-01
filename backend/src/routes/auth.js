@@ -2,9 +2,21 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
+
+// Photo upload storage for user profile pictures
+const avatarDir = path.join(__dirname, '../uploads/avatars');
+if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true });
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, avatarDir),
+  filename: (req, file, cb) => cb(null, `avatar_${req.user.id}_${Date.now()}${path.extname(file.originalname)}`),
+});
+const uploadAvatar = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Register
 router.post('/register', async (req, res) => {
@@ -56,6 +68,53 @@ router.get('/me', authMiddleware, async (req, res) => {
   const [rows] = await db.query('SELECT id, first_name, last_name, email, phone, address, city, province, role, profile_photo, created_at FROM users WHERE id = ?', [req.user.id]);
   if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
   res.json(rows[0]);
+});
+
+// Update own profile (name, email, phone, address, city, province)
+router.put('/profile', authMiddleware, async (req, res) => {
+  try {
+    const { first_name, last_name, email, phone, address, city, province } = req.body;
+
+    // Make sure the new email isn't taken by someone else
+    if (email) {
+      const [taken] = await db.query('SELECT id FROM users WHERE email = ? AND id != ?', [email, req.user.id]);
+      if (taken.length > 0) return res.status(409).json({ error: 'Email already in use' });
+    }
+
+    const nullify = (v) => (v === '' || v === undefined) ? null : v;
+    await db.query(
+      `UPDATE users SET first_name=?, last_name=?, email=?, phone=?, address=?, city=?, province=? WHERE id=?`,
+      [first_name, last_name, email, nullify(phone), nullify(address), nullify(city), nullify(province), req.user.id]
+    );
+
+    const [rows] = await db.query(
+      'SELECT id, first_name, last_name, email, phone, address, city, province, role, profile_photo, created_at FROM users WHERE id = ?',
+      [req.user.id]
+    );
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Upload / change own profile photo
+router.put('/profile/photo', authMiddleware, uploadAvatar.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
+    const photoUrl = `/uploads/avatars/${req.file.filename}`;
+    await db.query('UPDATE users SET profile_photo = ? WHERE id = ?', [photoUrl, req.user.id]);
+    res.json({ profile_photo: photoUrl });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: read-only view of any user's profile (for vetting adopters). Never returns password_hash.
+router.get('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT id, first_name, last_name, email, phone, address, city, province, role, profile_photo, created_at FROM users WHERE id = ?',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;

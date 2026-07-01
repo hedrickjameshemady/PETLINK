@@ -70,6 +70,9 @@ export default function Navbar() {
                     My Dashboard
                   </Link>
                 )}
+                <Link to="/profile" style={styles.dropItem} onClick={() => setMenuOpen(false)}>
+                  Profile
+                </Link>
                 <button onClick={() => { handleLogout(); setMenuOpen(false); }} style={styles.dropItemBtn}>
                   Logout
                 </button>

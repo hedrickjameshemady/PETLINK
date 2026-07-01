@@ -46,8 +46,17 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // Merge updated fields into the logged-in user and persist them
+  const updateUser = (fields) => {
+    setUser(prev => {
+      const merged = { ...prev, ...fields };
+      localStorage.setItem('petlink_user', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading, API }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser, loading, API }}>
       {children}
     </AuthContext.Provider>
   );
