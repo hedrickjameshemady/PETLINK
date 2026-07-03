@@ -17,6 +17,16 @@ const announcementStorage = multer.diskStorage({
 });
 const uploadAnnouncement = multer({ storage: announcementStorage, limits: { fileSize: 50 * 1024 * 1024 } });
 
+// ─── Campaign banner upload config ──────────────────────────────────────────
+const campaignUploadDir = path.join(__dirname, '../uploads/campaigns');
+if (!fs.existsSync(campaignUploadDir)) fs.mkdirSync(campaignUploadDir, { recursive: true });
+
+const campaignStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, campaignUploadDir),
+  filename: (req, file, cb) => cb(null, `camp_${Date.now()}${path.extname(file.originalname)}`),
+});
+const uploadCampaign = multer({ storage: campaignStorage, limits: { fileSize: 10 * 1024 * 1024 } });
+
 
 router.get('/campaigns', async (req, res) => {
   try {
@@ -41,25 +51,35 @@ router.get('/campaigns', async (req, res) => {
 });
 
 // Create campaign (admin)
-router.post('/campaigns', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/campaigns', authMiddleware, adminMiddleware, uploadCampaign.single('banner'), async (req, res) => {
   try {
     const { title, type, status, description, target_amount, start_date, end_date, location } = req.body;
+    const bannerUrl = req.file ? `/uploads/campaigns/${req.file.filename}` : null;
     const [result] = await db.query(
-      'INSERT INTO campaigns (title, type, status, description, target_amount, start_date, end_date, location, created_by) VALUES (?,?,?,?,?,?,?,?,?)',
-      [title, type, status || 'Upcoming', description, target_amount || null, start_date || null, end_date || null, location || null, req.user.id]
+      'INSERT INTO campaigns (title, type, status, description, target_amount, start_date, end_date, location, banner_image, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [title, type, status || 'Upcoming', description, target_amount || null, start_date || null, end_date || null, location || null, bannerUrl, req.user.id]
     );
     res.status(201).json({ id: result.insertId, message: 'Campaign created' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Update campaign
-router.put('/campaigns/:id', authMiddleware, adminMiddleware, async (req, res) => {
+router.put('/campaigns/:id', authMiddleware, adminMiddleware, uploadCampaign.single('banner'), async (req, res) => {
   try {
     const { title, type, description, target_amount, start_date, end_date, location, status } = req.body;
-    await db.query(
-      'UPDATE campaigns SET title=?, type=?, description=?, target_amount=?, start_date=?, end_date=?, location=?, status=? WHERE id=?',
-      [title, type, description, target_amount, start_date, end_date, location, status, req.params.id]
-    );
+
+    if (req.file) {
+      const bannerUrl = `/uploads/campaigns/${req.file.filename}`;
+      await db.query(
+        'UPDATE campaigns SET title=?, type=?, description=?, target_amount=?, start_date=?, end_date=?, location=?, status=?, banner_image=? WHERE id=?',
+        [title, type, description, target_amount || null, start_date || null, end_date || null, location || null, status, bannerUrl, req.params.id]
+      );
+    } else {
+      await db.query(
+        'UPDATE campaigns SET title=?, type=?, description=?, target_amount=?, start_date=?, end_date=?, location=?, status=? WHERE id=?',
+        [title, type, description, target_amount || null, start_date || null, end_date || null, location || null, status, req.params.id]
+      );
+    }
     res.json({ message: 'Campaign updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

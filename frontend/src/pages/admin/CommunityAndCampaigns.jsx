@@ -69,6 +69,8 @@ export default function CommunityAndCampaigns() {
 
   const [editEvent, setEditEvent] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [eventPhoto, setEventPhoto] = useState(null);
+  const [eventPhotoPreview, setEventPhotoPreview] = useState('');
 
   const [viewEvent, setViewEvent] = useState(null);
   const [viewData, setViewData] = useState([]);
@@ -96,7 +98,10 @@ export default function CommunityAndCampaigns() {
   const handleCreateEvent = async (e) => {
     e.preventDefault();
     try {
-      await API.post('/campaigns', form);
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => fd.append(k, v ?? ''));
+      if (eventPhoto) fd.append('banner', eventPhoto);
+      await API.post('/campaigns', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast('Event added!');
       loadEvents();
     } catch (err) {
@@ -105,10 +110,13 @@ export default function CommunityAndCampaigns() {
     }
     setShowCreate(false);
     setForm({ title: '', type: 'Event', status: 'Upcoming', description: '', target_amount: '', start_date: '', end_date: '', location: '' });
+    setEventPhoto(null); setEventPhotoPreview('');
   };
 
   const openEdit = (ev) => {
     setEditEvent(ev);
+    setEventPhoto(null);
+    setEventPhotoPreview(ev.banner_image ? `http://localhost:5000${ev.banner_image}` : '');
     setEditForm({
       title: ev.title,
       type: ev.type,
@@ -138,7 +146,10 @@ export default function CommunityAndCampaigns() {
   const handleEditEvent = async (e) => {
     e.preventDefault();
     try {
-      await API.put(`/campaigns/${editEvent.id}`, editForm);
+      const fd = new FormData();
+      Object.entries(editForm).forEach(([k, v]) => fd.append(k, v ?? ''));
+      if (eventPhoto) fd.append('banner', eventPhoto);
+      await API.put(`/campaigns/${editEvent.id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast('Event updated!');
       loadEvents();
     } catch (err) {
@@ -146,6 +157,7 @@ export default function CommunityAndCampaigns() {
       return;
     }
     setEditEvent(null);
+    setEventPhoto(null); setEventPhotoPreview('');
   };
 
   const handleDeleteEvent = (ev) => {
@@ -482,8 +494,25 @@ export default function CommunityAndCampaigns() {
                 <label className="form-label">Description *</label>
                 <textarea className="form-textarea" placeholder="Describe the event..." required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
               </div>
+              <div className="form-group">
+                <label className="form-label">Event Photo</label>
+                {eventPhotoPreview && (
+                  <img src={eventPhotoPreview} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }} />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={e => {
+                    const f = e.target.files[0];
+                    if (!f) return;
+                    setEventPhoto(f);
+                    setEventPhotoPreview(URL.createObjectURL(f));
+                  }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Shown on the public event card (image under 10MB).</span>
+              </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" onClick={() => setShowCreate(false)}>Cancel</button>
+                <button type="button" className="btn btn-outline" onClick={() => { setShowCreate(false); setEventPhoto(null); setEventPhotoPreview(''); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Add Event</button>
               </div>
             </form>
@@ -548,8 +577,25 @@ export default function CommunityAndCampaigns() {
                 <label className="form-label">Description *</label>
                 <textarea className="form-textarea" required value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
               </div>
+              <div className="form-group">
+                <label className="form-label">Event Photo</label>
+                {eventPhotoPreview && (
+                  <img src={eventPhotoPreview} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }} />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={e => {
+                    const f = e.target.files[0];
+                    if (!f) return;
+                    setEventPhoto(f);
+                    setEventPhotoPreview(URL.createObjectURL(f));
+                  }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Leave empty to keep the current photo.</span>
+              </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" onClick={() => setEditEvent(null)}>Cancel</button>
+                <button type="button" className="btn btn-outline" onClick={() => { setEditEvent(null); setEventPhoto(null); setEventPhotoPreview(''); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save Changes</button>
               </div>
             </form>

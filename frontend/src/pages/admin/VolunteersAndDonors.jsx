@@ -397,7 +397,9 @@ export default function VolunteersAndDonors() {
                   <td>{d.donor_phone || '—'}</td>
                   <td>{d.type}</td>
                   <td style={{ fontWeight: 600 }}>
-                    ₱{Number(d.amount ?? 0).toLocaleString()}
+                    {d.donation_kind === 'Non-Monetary'
+                      ? `${d.item_category || 'Item'}${d.item_quantity ? ` (${d.item_quantity})` : ''} · ${d.handoff_method || '—'}`
+                      : `₱${Number(d.amount ?? 0).toLocaleString()}`}
                   </td>
                   <td>{d.donated_at ? new Date(d.donated_at).toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—'}</td>
                   <td>

@@ -96,22 +96,22 @@ router.patch('/applications/:id/status', authMiddleware, adminMiddleware, async 
     await db.query('UPDATE volunteer_applications SET status=?, reviewed_by=?, reviewed_at=NOW() WHERE id=?', [status, req.user.id, req.params.id]);
 
 
-if (status === 'Approved') {
-  const [existing] = await db.query('SELECT id FROM volunteers WHERE user_id = ?', [app[0].user_id]);
-  if (existing.length === 0) {
-    // Not a volunteer yet — insert them
-    await db.query(
-      'INSERT INTO volunteers (user_id, availability, preferred_role, role, status, start_date) VALUES (?,?,?,?,?,CURDATE())',
-      [app[0].user_id, app[0].availability, app[0].preferred_role, app[0].preferred_role, 'Active']
-    );
-  } else {
-    // Already exists — just update their info to Active
-    await db.query(
-      'UPDATE volunteers SET availability=?, role=?, status=?, start_date=CURDATE() WHERE user_id=?',
-      [app[0].availability, app[0].preferred_role, 'Active', app[0].user_id]
-    );
-  }
-}
+    if (status === 'Approved') {
+      const [existing] = await db.query('SELECT id FROM volunteers WHERE user_id = ?', [app[0].user_id]);
+      if (existing.length === 0) {
+        // Not a volunteer yet — insert them
+        await db.query(
+          'INSERT INTO volunteers (user_id, availability, preferred_role, role, status, start_date) VALUES (?,?,?,?,?,CURDATE())',
+          [app[0].user_id, app[0].availability, app[0].preferred_role, app[0].preferred_role, 'Active']
+        );
+      } else {
+        // Already exists — just update their info to Active
+        await db.query(
+          'UPDATE volunteers SET availability=?, role=?, status=?, start_date=CURDATE() WHERE user_id=?',
+          [app[0].availability, app[0].preferred_role, 'Active', app[0].user_id]
+        );
+      }
+    }
     res.json({ message: `Application ${status}` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -162,21 +162,69 @@ router.get('/donations', authMiddleware, adminMiddleware, async (req, res) => {
 
 router.post('/donations', uploadProof.single('proof'), async (req, res) => {
   try {
-    const { donor_id, donor_name, donor_email, donor_phone, type, amount, purpose, message, campaign_id } = req.body;
+    const {
+      donor_id, donor_name, donor_email, donor_phone, type, purpose, message, campaign_id,
+      donation_kind, amount,
+      item_category, item_description, item_quantity,
+      handoff_method, pickup_address, pickup_date,
+      courier_name, tracking_number, contact_phone,
+    } = req.body;
 
-    // Basic server-side guard: amount must be a positive number
-    const amt = Number(amount);
-    if (!amt || amt <= 0) return res.status(400).json({ error: 'A valid donation amount is required.' });
+    const kind = donation_kind === 'Non-Monetary' ? 'Non-Monetary' : 'Monetary';
+
+    // ---- Server-side validation ----
+    let amt = null;
+    if (kind === 'Monetary') {
+      amt = Number(amount);
+      if (!amt || amt <= 0) {
+        return res.status(400).json({ error: 'A valid donation amount is required.' });
+      }
+    } else {
+      if (!item_category || !String(item_category).trim()) {
+        return res.status(400).json({ error: 'Please specify what you are donating.' });
+      }
+      if (!['Pickup', 'Drop-off', 'Courier'].includes(handoff_method)) {
+        return res.status(400).json({ error: 'Please select how the donation will reach us.' });
+      }
+      if (handoff_method === 'Pickup') {
+        if (!pickup_address || !String(pickup_address).trim()) {
+          return res.status(400).json({ error: 'A pickup address is required for Street Paws pickup.' });
+        }
+        if (!contact_phone || !String(contact_phone).trim()) {
+          return res.status(400).json({ error: 'A contact number is required for pickup.' });
+        }
+      }
+      if (handoff_method === 'Courier') {
+        if (!courier_name || !String(courier_name).trim()) {
+          return res.status(400).json({ error: 'Please enter the courier name.' });
+        }
+        if (!tracking_number || !String(tracking_number).trim()) {
+          return res.status(400).json({ error: 'Please enter the tracking number.' });
+        }
+      }
+    }
 
     const proofUrl = req.file ? `/uploads/donations/${req.file.filename}` : null;
 
     const [result] = await db.query(
-      'INSERT INTO donations (donor_id, donor_name, donor_email, donor_phone, type, amount, purpose, message, campaign_id, proof_file) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      [donor_id || null, donor_name || null, donor_email || null, donor_phone || null, type || 'Individual', amt, purpose || null, message || null, campaign_id || null, proofUrl]
+      `INSERT INTO donations
+        (donor_id, donor_name, donor_email, donor_phone, type, donation_kind, amount,
+         item_category, item_description, item_quantity, handoff_method, pickup_address,
+         pickup_date, courier_name, tracking_number, contact_phone,
+         purpose, message, campaign_id, proof_file)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        donor_id || null, donor_name || null, donor_email || null, donor_phone || null,
+        type || 'Individual', kind, amt,
+        item_category || null, item_description || null, item_quantity || null,
+        handoff_method || null, pickup_address || null,
+        pickup_date || null, courier_name || null, tracking_number || null, contact_phone || null,
+        purpose || null, message || null, campaign_id || null, proofUrl,
+      ]
     );
 
-    // If a campaign was selected, add the donation amount to its raised_amount
-    if (campaign_id) {
+    // Only monetary donations contribute to a campaign's raised amount
+    if (kind === 'Monetary' && campaign_id) {
       await db.query(
         'UPDATE campaigns SET raised_amount = raised_amount + ? WHERE id = ?',
         [amt, campaign_id]
@@ -191,7 +239,7 @@ router.post('/donations', uploadProof.single('proof'), async (req, res) => {
 router.get('/stats', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const [[volStats]] = await db.query('SELECT COUNT(*) AS total, SUM(status="Active") AS active FROM volunteers');
-    const [[donStats]] = await db.query('SELECT COUNT(DISTINCT donor_email) AS total_donors, SUM(amount) AS raised FROM donations');
+    const [[donStats]] = await db.query("SELECT COUNT(DISTINCT donor_email) AS total_donors, COALESCE(SUM(amount),0) AS raised FROM donations WHERE donation_kind='Monetary'");
     res.json({ volunteers: volStats, donations: donStats });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
