@@ -211,7 +211,7 @@ export default function Community() {
               {viewEvent.status !== 'Cancelled' && viewEvent.status !== 'Completed' ? (
                 <div style={{ marginTop: 22 }}>
                   {isFund(viewEvent) ? (
-                    <a href="/donate" style={{ ...st.primaryBtn, textDecoration: 'none', display: 'inline-block' }}>
+                    <a href={`/donate?campaign=${viewEvent.id}`} style={{ ...st.primaryBtn, textDecoration: 'none', display: 'inline-block' }}>
                       💚 Donate to this Campaign
                     </a>
                   ) : (

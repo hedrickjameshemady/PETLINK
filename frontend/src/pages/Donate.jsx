@@ -11,6 +11,9 @@ export default function Donate() {
   const { user } = useAuth();
   const fileRef = useRef(null);
 
+  // Read ?campaign=<id> from the URL — when present, this donation is locked to that campaign
+  const lockedCampaignId = new URLSearchParams(window.location.search).get('campaign') || '';
+
   const [kind, setKind] = useState('Monetary'); // 'Monetary' | 'Non-Monetary'
 
   const [form, setForm] = useState({
@@ -18,7 +21,7 @@ export default function Donate() {
     type: '',
     amount: '',
     purpose: '',
-    campaign_id: '',
+    campaign_id: lockedCampaignId,
     // non-monetary
     item_category: '',
     item_description: '',
@@ -54,6 +57,7 @@ export default function Donate() {
   };
 
   const switchKind = (k) => {
+    if (lockedCampaignId) return; // campaign donations are always monetary
     setKind(k);
     setErrors({});
   };
@@ -198,22 +202,24 @@ export default function Donate() {
           <div style={styles.formWrap}>
             {errors._server && <div style={styles.serverError}>{errors._server}</div>}
 
-            {/* ======= TOP TOGGLE ======= */}
-            <div style={styles.toggleWrap}>
-              {['Monetary', 'Non-Monetary'].map(k => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => switchKind(k)}
-                  style={{
-                    ...styles.toggleBtn,
-                    ...(kind === k ? styles.toggleBtnActive : {}),
-                  }}
-                >
-                  {k === 'Monetary' ? '💵 Monetary Donation' : '📦 Non-Monetary Donation'}
-                </button>
-              ))}
-            </div>
+            {/* ======= TOP TOGGLE (hidden for campaign donations — always monetary) ======= */}
+            {!lockedCampaignId && (
+              <div style={styles.toggleWrap}>
+                {['Monetary', 'Non-Monetary'].map(k => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => switchKind(k)}
+                    style={{
+                      ...styles.toggleBtn,
+                      ...(kind === k ? styles.toggleBtnActive : {}),
+                    }}
+                  >
+                    {k === 'Monetary' ? '💵 Monetary Donation' : '📦 Non-Monetary Donation'}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Name */}
             <Field label="Name" required error={errors.donor_name}>
@@ -268,7 +274,14 @@ export default function Donate() {
                   />
                 </Field>
 
-                {campaigns.length > 0 && (
+                {lockedCampaignId ? (
+                  <Field label="Donating to Campaign">
+                    <div style={{ ...styles.input, background: '#f6f8fa', display: 'flex', alignItems: 'center', color: 'var(--text-dark)', fontWeight: 600 }}>
+                      {campaigns.find(c => String(c.id) === String(lockedCampaignId))?.title || 'Selected campaign'}
+                    </div>
+                    <span style={styles.hint}>This donation goes directly to this campaign and can't be changed here.</span>
+                  </Field>
+                ) : campaigns.length > 0 && (
                   <Field label="Donate to a Campaign" hint="optional">
                     <select
                       style={styles.input}
