@@ -284,7 +284,7 @@ export default function CommunityAndCampaigns() {
       {/* ─── EVENTS & CAMPAIGN ─── */}
       <div className="card">
         <div style={styles.cardHeader}>
-          <h2 style={styles.sectionTitle}>Events & Campaign</h2>
+          <h2 style={styles.sectionTitle}>Campaign and Events</h2>
           <div style={{ display: 'flex', gap: 10 }}>
             <select className="cc-type-select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
               <option>All Types</option>
@@ -329,7 +329,7 @@ export default function CommunityAndCampaigns() {
 
       {/* ─── ANNOUNCEMENTS & NEWS ─── */}
       <div className="card">
-        <h2 style={{ ...styles.sectionTitle, marginBottom: 16 }}>Announcements & News</h2>
+        <h2 style={{ ...styles.sectionTitle, marginBottom: 16 }}>Community Engagement</h2>
 
         <form onSubmit={handlePost} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
           <input

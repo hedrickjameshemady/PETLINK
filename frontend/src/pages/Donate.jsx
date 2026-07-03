@@ -15,6 +15,7 @@ export default function Donate() {
   const lockedCampaignId = new URLSearchParams(window.location.search).get('campaign') || '';
 
   const [kind, setKind] = useState('Monetary'); // 'Monetary' | 'Non-Monetary'
+  const [customAmount, setCustomAmount] = useState(false); // true when "Other amount" is chosen
 
   const [form, setForm] = useState({
     donor_name: '',
@@ -60,6 +61,7 @@ export default function Donate() {
     if (lockedCampaignId) return; // campaign donations are always monetary
     setKind(k);
     setErrors({});
+    setField('contact_phone', ''); // reset so each flow collects its own number
   };
 
   const setHandoff = (method) => {
@@ -90,13 +92,18 @@ export default function Donate() {
 
   const validate = () => {
     const e = {};
-    if (!form.donor_name.trim()) e.donor_name = 'Please enter your name.';
     if (!form.type) e.type = 'Please select a donor type.';
+    if (form.type !== 'Anonymous' && !form.donor_name.trim()) {
+      e.donor_name = form.type === 'Organization' ? 'Please enter the organization name.' : 'Please enter your name.';
+    }
 
     if (kind === 'Monetary') {
       const amt = Number(form.amount);
       if (!form.amount) e.amount = 'Please enter an amount.';
       else if (isNaN(amt) || amt <= 0) e.amount = 'Enter a valid amount greater than 0.';
+
+      if (!form.contact_phone.trim()) e.contact_phone = 'A contact number is required so we can send your thank-you message.';
+      else if (!/^[0-9+\-\s()]{7,}$/.test(form.contact_phone.trim())) e.contact_phone = 'Enter a valid phone number.';
     } else {
       if (!form.item_category) e.item_category = 'Please select what you are donating.';
       if (form.item_category === 'Other' && !form.item_description.trim())
@@ -129,7 +136,7 @@ export default function Donate() {
       setLoading(true);
       const fd = new FormData();
       fd.append('donor_id', user ? user.id : '');
-      fd.append('donor_name', form.donor_name.trim());
+      fd.append('donor_name', form.type === 'Anonymous' ? '' : form.donor_name.trim());
       fd.append('donor_email', user?.email || '');
       fd.append('type', form.type);
       fd.append('donation_kind', kind);
@@ -138,6 +145,7 @@ export default function Donate() {
 
       if (kind === 'Monetary') {
         fd.append('amount', form.amount);
+        fd.append('contact_phone', form.contact_phone.trim());
       } else {
         fd.append('item_category', form.item_category);
         fd.append('item_description', form.item_description.trim());
@@ -163,8 +171,8 @@ export default function Donate() {
       setSubmitted(true);
     } catch (err) {
       const msg = err.response?.data?.error;
-      if (msg) setErrors(prev => ({ ...prev, _server: msg }));
-      else setSubmitted(true); // demo fallback when backend unreachable
+      if (msg) { setErrors(prev => ({ ...prev, _server: msg })); return; }
+      setSubmitted(true); // demo fallback when backend unreachable
     } finally {
       setLoading(false);
     }
@@ -193,7 +201,11 @@ export default function Donate() {
         {submitted && (
           <SuccessModal
             title="Donation Successful"
-            message="Thank you for your generous support. Your donation has been recorded and will help us care for rescued animals. A confirmation record has been saved for your reference."
+            message={
+              form.type === 'Anonymous' || !form.donor_name.trim()
+                ? 'Thank you for your generous support. Your donation has been recorded and will help us care for rescued animals. A confirmation record has been saved for your reference.'
+                : `Thank you, ${form.donor_name.trim()}, for your generous support! Your donation has been recorded and will help us care for rescued animals. A confirmation record has been saved for your reference.`
+            }
             onClose={() => setSubmitted(false)}
           />
         )}
@@ -221,57 +233,105 @@ export default function Donate() {
               </div>
             )}
 
-            {/* Name */}
-            <Field label="Name" required error={errors.donor_name}>
-              <input
-                style={inputStyle('donor_name')}
-                placeholder="e.g. Alex Manaloto"
-                value={form.donor_name}
-                onChange={e => setField('donor_name', e.target.value)}
-              />
+            {/* Donor type — checklist (single choice), placed at the top */}
+            <Field label="Donor Type" required error={errors.type}>
+              <div style={styles.donorTypeRow}>
+                {DONOR_TYPES.map(t => (
+                  <label
+                    key={t}
+                    style={{
+                      ...styles.donorTypeCard,
+                      borderColor: form.type === t ? 'var(--primary)' : 'var(--border)',
+                      background: form.type === t ? '#fff7f0' : 'white',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.type === t}
+                      onChange={() => setField('type', form.type === t ? '' : t)}
+                      style={{ accentColor: 'var(--primary)' }}
+                    />
+                    <span>{t}</span>
+                  </label>
+                ))}
+              </div>
             </Field>
 
-            {/* Donor type (shared) */}
-            <Field label="Donor Type" required error={errors.type}>
-              <select
-                style={inputStyle('type')}
-                value={form.type}
-                onChange={e => setField('type', e.target.value)}
+            {/* Name — label + behavior depends on donor type */}
+            {form.type === 'Anonymous' ? (
+              <Field label="Name">
+                <input
+                  style={{ ...styles.input, background: '#f1f3f5', color: 'var(--text-muted)', cursor: 'not-allowed' }}
+                  placeholder="Anonymous donor"
+                  value=""
+                  disabled
+                />
+                <span style={styles.hint}>Your name won't be recorded for anonymous donations.</span>
+              </Field>
+            ) : (
+              <Field
+                label={form.type === 'Organization' ? 'Name of Organization' : 'Name'}
+                required
+                error={errors.donor_name}
               >
-                <option value="">Select Type</option>
-                {DONOR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </Field>
+                <input
+                  style={inputStyle('donor_name')}
+                  placeholder={form.type === 'Organization' ? 'e.g. Paws for a Cause Inc.' : 'e.g. Alex Manaloto'}
+                  value={form.donor_name}
+                  onChange={e => setField('donor_name', e.target.value)}
+                />
+              </Field>
+            )}
 
             {/* ================= MONETARY ================= */}
             {kind === 'Monetary' && (
               <>
                 <div style={styles.impactRow}>
-                  {[['₱200', 'Feeds a pet for a week'], ['₱500', 'Covers a medical check-up'], ['₱2,000', 'Sponsors a pet for a month']].map(([a, d]) => (
-                    <div
-                      key={a}
-                      style={{
-                        ...styles.impactCard,
-                        borderColor: form.amount === a.replace(/[^\d.]/g, '') ? 'var(--primary)' : 'var(--border)',
-                      }}
-                      onClick={() => pickAmount(a)}
-                    >
-                      <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--primary)' }}>{a}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{d}</div>
-                    </div>
-                  ))}
+                  {[['₱300', 'Feeds a pet for a week'], ['₱500', 'Covers a medical check-up'], ['₱2,000', 'Sponsors a pet for a month']].map(([a, d]) => {
+                    const val = a.replace(/[^\d.]/g, '');
+                    const active = !customAmount && form.amount === val;
+                    return (
+                      <div
+                        key={a}
+                        style={{ ...styles.impactCard, borderColor: active ? 'var(--primary)' : 'var(--border)' }}
+                        onClick={() => { setCustomAmount(false); pickAmount(a); }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--primary)' }}>{a}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{d}</div>
+                      </div>
+                    );
+                  })}
+                  {/* Other amount card */}
+                  <div
+                    style={{ ...styles.impactCard, borderColor: customAmount ? 'var(--primary)' : 'var(--border)' }}
+                    onClick={() => { setCustomAmount(true); setField('amount', ''); }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--primary)' }}>Other</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Enter your own amount</div>
+                  </div>
                 </div>
 
                 <Field label="Amount" required error={errors.amount}>
                   <input
-                    style={inputStyle('amount')}
+                    style={{ ...inputStyle('amount'), background: customAmount ? 'white' : '#f6f8fa', cursor: customAmount ? 'text' : 'not-allowed' }}
                     type="number"
                     min="1"
-                    step="0.01"
-                    placeholder="Php"
+                    step="1"
+                    placeholder={customAmount ? 'Enter amount' : 'Select an amount above'}
                     value={form.amount}
+                    readOnly={!customAmount}
                     onChange={e => setField('amount', e.target.value)}
                   />
+                </Field>
+
+                <Field label="Contact Number" required error={errors.contact_phone}>
+                  <input
+                    style={inputStyle('contact_phone')}
+                    placeholder="e.g. 0917 123 4567"
+                    value={form.contact_phone}
+                    onChange={e => setField('contact_phone', e.target.value)}
+                  />
+                  <span style={styles.hint}>We'll use this to send your thank-you message.</span>
                 </Field>
 
                 {lockedCampaignId ? (
@@ -356,23 +416,28 @@ export default function Donate() {
                 <Field label="How will it reach us?" required error={errors.handoff_method}>
                   <div style={styles.handoffRow}>
                     {[
-                      ['Pickup', '🐾 Picked up by Street Paws'],
-                      ['Drop-off', '🏠 Delivered by me (Drop-off)'],
-                      ['Courier', '📮 Courier / Shipping'],
-                    ].map(([val, lbl]) => (
+                      ['Pickup', '🐾 Picked up by Street Paws', false],
+                      ['Drop-off', '🏠 Delivered by me (Drop-off)', false],
+                      ['Courier', '📮 Courier / Shipping', true],
+                    ].map(([val, lbl, disabled]) => (
                       <div
                         key={val}
-                        onClick={() => setHandoff(val)}
+                        onClick={() => { if (!disabled) setHandoff(val); }}
                         style={{
                           ...styles.handoffCard,
                           borderColor: form.handoff_method === val ? 'var(--primary)' : 'var(--border)',
-                          background: form.handoff_method === val ? '#fff7f0' : 'white',
+                          background: disabled ? '#f1f3f5' : (form.handoff_method === val ? '#fff7f0' : 'white'),
+                          color: disabled ? 'var(--text-muted)' : 'var(--text-dark)',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          opacity: disabled ? 0.65 : 1,
                         }}
                       >
                         {lbl}
+                        {disabled && <div style={{ fontSize: 11, fontWeight: 500, marginTop: 4 }}>Coming soon</div>}
                       </div>
                     ))}
                   </div>
+                  <span style={styles.hint}>📮 Courier / Shipping isn't available yet — it's planned for a future update.</span>
                 </Field>
 
                 {/* Pickup fields */}
@@ -544,8 +609,14 @@ const styles = {
   toggleBtnActive: {
     background: 'white', color: 'var(--primary)', boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
   },
-  impactRow: { display: 'flex', gap: 12, marginBottom: 4 },
-  impactCard: { flex: 1, border: '1.5px solid var(--border)', borderRadius: 10, padding: '16px 14px', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s' },
+  impactRow: { display: 'flex', gap: 12, marginBottom: 4, flexWrap: 'wrap' },
+  impactCard: { flex: '1 1 22%', minWidth: 130, border: '1.5px solid var(--border)', borderRadius: 10, padding: '16px 14px', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s' },
+  donorTypeRow: { display: 'flex', gap: 10, flexWrap: 'wrap' },
+  donorTypeCard: {
+    flex: '1 1 30%', minWidth: 130, display: 'flex', alignItems: 'center', gap: 8,
+    border: '1.5px solid var(--border)', borderRadius: 10, padding: '12px 14px',
+    fontSize: 14, fontWeight: 600, color: 'var(--text-dark)', cursor: 'pointer', transition: 'all 0.15s',
+  },
   handoffRow: { display: 'flex', gap: 10, flexWrap: 'wrap' },
   handoffCard: {
     flex: '1 1 30%', minWidth: 150, border: '1.5px solid var(--border)', borderRadius: 10,
