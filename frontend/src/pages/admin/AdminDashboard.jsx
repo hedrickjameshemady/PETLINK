@@ -91,6 +91,21 @@ const weekPct = dons.prevWeek > 0
   ? Math.round(((dons.thisWeek - dons.prevWeek) / dons.prevWeek) * 100)
   : null;
 
+  // Last 6 months for the bar chart, filling empty months with 0
+  const monthly = (() => {
+    const raw = s.monthlyDonations || [];
+    const out = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const dte = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = `${dte.getFullYear()}-${String(dte.getMonth() + 1).padStart(2, '0')}`;
+      const hit = raw.find(m => m.ym === ym);
+      out.push({ label: dte.toLocaleString('en-PH', { month: 'short' }), total: Number(hit?.total || 0) });
+    }
+    return out;
+  })();
+  const monthlyMax = Math.max(1, ...monthly.map(m => m.total));
+
   return (
     <div style={{ fontFamily: 'inherit' }}>
 
@@ -271,13 +286,46 @@ const weekPct = dons.prevWeek > 0
           <div style={css.donAmountBox}>
             <div style={css.donAmount}>₱{Number(s.donations?.raised || 0).toLocaleString()}</div>
             <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, marginTop: 4 }}>
-  {weekPct === null
-    ? `₱${Number(dons.thisWeek).toLocaleString()} received this week`
-   : weekPct >= 0
-      ? `+${weekPct}% vs last week`
-      : `-${Math.abs(weekPct)}% vs last week`}
-</div>
+              Total donations received (all-time)
+            </div>
           </div>
+
+          {/* Donation audit: monetary vs non-monetary breakdown */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 10 }}>
+            <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10.5, color: '#6b7280', fontWeight: 600 }}>THIS MONTH</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#15803d' }}>₱{Number(s.donations?.raised_month || 0).toLocaleString()}</div>
+            </div>
+            <div style={{ background: '#eff6ff', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10.5, color: '#6b7280', fontWeight: 600 }}>MONETARY</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1d4ed8' }}>{Number(s.donations?.monetary_count || 0)}</div>
+            </div>
+            <div style={{ background: '#fff7ed', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10.5, color: '#6b7280', fontWeight: 600 }}>NON-MONETARY</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#c2410c' }}>{Number(s.donations?.non_monetary_count || 0)}</div>
+            </div>
+          </div>
+          {/* Monthly donations bar chart (last 6 months, cleared funds only) */}
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', margin: '14px 0 6px' }}>
+            Monthly Donations (last 6 months)
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 92, padding: '0 2px' }}>
+            {monthly.map(m => (
+              <div key={m.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 4, minWidth: 0, height: '100%' }} title={`₱${m.total.toLocaleString()}`}>
+                <div style={{ fontSize: 9.5, color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {m.total > 0 ? `₱${m.total >= 1000 ? `${Math.round(m.total / 1000)}k` : m.total}` : ''}
+                </div>
+                <div style={{
+                  width: '100%', maxWidth: 34,
+                  height: `${Math.max(4, (m.total / monthlyMax) * 58)}px`,
+                  background: m.total > 0 ? 'linear-gradient(180deg, #34d399, #059669)' : '#e5e7eb',
+                  borderRadius: '6px 6px 2px 2px',
+                }} />
+                <div style={{ fontSize: 10.5, color: 'var(--text-mid)', fontWeight: 500 }}>{m.label}</div>
+              </div>
+            ))}
+          </div>
+
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', margin: '12px 0 8px' }}>
             Top Donors
           </div>

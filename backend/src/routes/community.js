@@ -214,7 +214,33 @@ router.get('/dashboard-stats', authMiddleware, adminMiddleware, async (req, res)
     const [[pets]] = await db.query('SELECT COUNT(*) AS total, SUM(status="Available") AS available, SUM(status="Adopted") AS adopted FROM pets');
     const [[apps]] = await db.query('SELECT COUNT(*) AS total, SUM(status="Pending Review") AS pending FROM adoption_applications');
     const [[vols]] = await db.query('SELECT COUNT(*) AS total FROM volunteers WHERE status="Active"');
-    const [[dons]] = await db.query('SELECT COALESCE(SUM(amount),0) AS raised FROM donations');
+    // Only money that actually arrived counts: cash/GCash/bank always, cheques only once Cleared
+    const [[dons]] = await db.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN donation_kind='Monetary'
+          AND (payment_method IS NULL OR payment_method <> 'Cheque' OR cheque_status = 'Cleared')
+          THEN amount END),0) AS raised,
+        COALESCE(SUM(CASE WHEN donation_kind='Monetary'
+          AND (payment_method IS NULL OR payment_method <> 'Cheque' OR cheque_status = 'Cleared')
+          AND MONTH(donated_at)=MONTH(NOW()) AND YEAR(donated_at)=YEAR(NOW())
+          THEN amount END),0) AS raised_month,
+        COALESCE(SUM(donation_kind='Monetary'),0) AS monetary_count,
+        COALESCE(SUM(donation_kind='Non-Monetary'),0) AS non_monetary_count,
+        COALESCE(SUM(CASE WHEN payment_method='Cheque' AND cheque_status='Pending' THEN amount END),0) AS pending_cheques
+      FROM donations
+    `);
+
+    // Monthly monetary donations for the last 6 months (bar chart data)
+    const [monthlyDonations] = await db.query(`
+      SELECT DATE_FORMAT(donated_at, '%Y-%m') AS ym,
+             COALESCE(SUM(amount),0) AS total
+      FROM donations
+      WHERE donation_kind='Monetary'
+        AND (payment_method IS NULL OR payment_method <> 'Cheque' OR cheque_status = 'Cleared')
+        AND donated_at >= DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 5 MONTH)
+      GROUP BY ym
+      ORDER BY ym
+    `);
 
     const [[lfTotal]]    = await db.query(`SELECT COUNT(*) AS value FROM lost_found_reports`);
     const [[lfPending]]  = await db.query(`SELECT COUNT(*) AS value FROM lost_found_reports WHERE status = 'Pending Review'`);
@@ -232,7 +258,7 @@ router.get('/dashboard-stats', authMiddleware, adminMiddleware, async (req, res)
       reunited: Number(lfReunited.value),
     };
 
-    res.json({ pets, applications: apps, volunteers: vols, donations: dons, lostFound });
+    res.json({ pets, applications: apps, volunteers: vols, donations: dons, monthlyDonations, lostFound });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

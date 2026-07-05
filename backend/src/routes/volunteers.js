@@ -235,11 +235,99 @@ router.post('/donations', uploadProof.single('proof'), async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Admin manually records a donation (walk-ins, cheques, item drop-offs)
+router.post('/donations/admin', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const {
+      donor_name, donor_email, donor_phone, type,
+      donation_kind, amount, payment_method,
+      cheque_number, cheque_bank, cheque_date, received_by,
+      item_category, item_description, item_quantity, handoff_method,
+      message,
+    } = req.body;
+
+    const kind = donation_kind === 'Non-Monetary' ? 'Non-Monetary' : 'Monetary';
+
+    if (!donor_name || !String(donor_name).trim()) {
+      return res.status(400).json({ error: 'Donor name is required.' });
+    }
+
+    let amt = null;
+    if (kind === 'Monetary') {
+      amt = Number(amount);
+      if (!amt || amt <= 0) return res.status(400).json({ error: 'A valid donation amount is required.' });
+      if (payment_method === 'Cheque') {
+        if (!cheque_number || !String(cheque_number).trim()) return res.status(400).json({ error: 'Cheque number is required.' });
+        if (!cheque_bank || !String(cheque_bank).trim()) return res.status(400).json({ error: 'Issuing bank is required.' });
+        if (!cheque_date) return res.status(400).json({ error: 'Cheque date is required.' });
+        if (!received_by || !String(received_by).trim()) return res.status(400).json({ error: 'Please record who received the cheque.' });
+      }
+    } else {
+      if (!item_category || !String(item_category).trim()) {
+        return res.status(400).json({ error: 'Please specify what is being donated.' });
+      }
+      if (!received_by || !String(received_by).trim()) {
+        return res.status(400).json({ error: 'Please record who received the items.' });
+      }
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO donations
+        (donor_name, donor_email, donor_phone, type, donation_kind, amount,
+         payment_method, cheque_number, cheque_bank, cheque_date, cheque_status, received_by,
+         item_category, item_description, item_quantity, handoff_method, message)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        donor_name, donor_email || null, donor_phone || null, type || 'Individual',
+        kind, amt,
+        kind === 'Monetary' ? (payment_method || 'Cash') : null,
+        payment_method === 'Cheque' ? cheque_number : null,
+        payment_method === 'Cheque' ? cheque_bank : null,
+        payment_method === 'Cheque' ? (cheque_date || null) : null,
+        (kind === 'Monetary' && payment_method === 'Cheque') ? 'Pending' : null,
+        (kind === 'Non-Monetary' || payment_method === 'Cheque') ? (received_by || null) : null,
+        item_category || null, item_description || null, item_quantity || null,
+        kind === 'Non-Monetary' ? (handoff_method || 'Drop-off') : null,
+        message || null,
+      ]
+    );
+
+    res.status(201).json({ id: result.insertId, message: 'Donation recorded.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Update a cheque's status (Pending -> Cleared / Bounced)
+router.patch('/donations/:id/cheque-status', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { cheque_status } = req.body;
+    if (!['Pending', 'Cleared', 'Bounced'].includes(cheque_status)) {
+      return res.status(400).json({ error: 'Invalid cheque status.' });
+    }
+    await db.query('UPDATE donations SET cheque_status = ? WHERE id = ?', [cheque_status, req.params.id]);
+    res.json({ message: `Cheque marked as ${cheque_status}.` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Stats — real counts from DB
 router.get('/stats', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const [[volStats]] = await db.query('SELECT COUNT(*) AS total, SUM(status="Active") AS active FROM volunteers');
-    const [[donStats]] = await db.query("SELECT COUNT(DISTINCT donor_email) AS total_donors, COALESCE(SUM(amount),0) AS raised FROM donations WHERE donation_kind='Monetary'");
+    // Only money that actually arrived counts: cash/GCash/bank always, cheques only once Cleared
+    const [[donStats]] = await db.query(`
+      SELECT
+        COUNT(DISTINCT donor_email) AS total_donors,
+        COALESCE(SUM(CASE WHEN donation_kind='Monetary'
+          AND (payment_method IS NULL OR payment_method <> 'Cheque' OR cheque_status = 'Cleared')
+          THEN amount END),0) AS raised,
+        COALESCE(SUM(CASE WHEN donation_kind='Monetary'
+          AND (payment_method IS NULL OR payment_method <> 'Cheque' OR cheque_status = 'Cleared')
+          AND MONTH(donated_at)=MONTH(NOW()) AND YEAR(donated_at)=YEAR(NOW())
+          THEN amount END),0) AS raised_month,
+        COALESCE(SUM(donation_kind='Monetary'),0) AS monetary_count,
+        COALESCE(SUM(donation_kind='Non-Monetary'),0) AS non_monetary_count,
+        COALESCE(SUM(CASE WHEN payment_method='Cheque' AND cheque_status='Pending' THEN amount END),0) AS pending_cheques
+      FROM donations
+    `);
     res.json({ volunteers: volStats, donations: donStats });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

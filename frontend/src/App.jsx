@@ -50,13 +50,21 @@ function ProtectedUser({ children }) {
   return children;
 }
 
+// Root doorman: admins/staff who open the site go straight to the admin panel
+function RootGate() {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="loading-spinner"><div className="spinner"/></div>;
+  if (user && (user.role === 'admin' || user.role === 'staff')) return <Navigate to="/admin" replace />;
+  return <Home />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Root: show landing page to everyone */}
-          <Route path="/" element={<Home />} />
+          {/* Root: admins go to /admin, everyone else sees the landing page */}
+          <Route path="/" element={<RootGate />} />
 
           {/* Guest-only: redirect logged-in users to their dashboard */}
           <Route path="/login" element={<GuestOnly><Login /></GuestOnly>} />
