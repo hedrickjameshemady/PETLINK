@@ -5,9 +5,10 @@ import { useAuth, API } from '../../context/AuthContext';
 const NAV_ITEMS = [
   { path: '/admin', label: 'Dashboard', icon: '▦' },
   { path: '/admin/pets', label: 'Pets and Adoptions', icon: '🐾' },
-  { path: '/admin/volunteers', label: 'Volunteer and Donors', icon: '🤝' },
-  { path: '/admin/community', label: 'Community and Campaigns', icon: '📢' },
   { path: '/admin/lost-and-found', label: 'Lost and Found', icon: '🔍' },
+  { path: '/admin/volunteers', label: 'Volunteer Records', icon: '🤝' },
+  { path: '/admin/donors', label: 'Donors', icon: '💝' },
+  { path: '/admin/community', label: 'Community Engagement', icon: '📢' },
 ];
 
 const QUICK_ACTIONS = [

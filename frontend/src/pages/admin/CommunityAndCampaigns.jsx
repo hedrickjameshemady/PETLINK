@@ -7,9 +7,13 @@ const NEEDS_TARGET = (type) => type === 'Fundraiser' || type === 'Drive';
 
 const FEEDBACK_TABS = [
   { key: 'ALL', label: 'ALL' },
+  { key: 'General', label: 'General' },
   { key: 'Adoption', label: 'Adoption Experience' },
   { key: 'Volunteer', label: 'Volunteer Activity' },
   { key: 'Event', label: 'Event Feedback' },
+  { key: 'Donation', label: 'Donation' },
+  { key: 'Website', label: 'Website' },
+  { key: 'Other', label: 'Other' },
 ];
 
 const fmtDate = (d) => (d ? String(d).slice(0, 10) : '—');
@@ -55,6 +59,138 @@ const Stars = ({ rating = 0 }) => (
     ))}
   </div>
 );
+
+/* ─── Feedback analytics: NLP common words + rating charts ─── */
+const STOPWORDS = new Set([
+  'the','a','an','and','or','but','if','then','else','of','to','in','on','at','for','with','about','into','through',
+  'is','am','are','was','were','be','been','being','it','its','this','that','these','those','i','me','my','we','our',
+  'you','your','he','him','his','she','her','they','them','their','so','very','just','not','no','yes','too','also',
+  'have','has','had','do','does','did','can','could','will','would','should','may','might','as','by','from','up','down',
+  'out','over','under','again','more','most','some','such','only','own','same','than','when','where','why','how','all',
+  'any','both','each','few','other','because','while','during','before','after','there','here','what','which','who',
+  'na','ng','sa','ang','po','ko','ako','yung','lang','mga','si','ni','kay','naman','din','rin','pa','ba','kasi','pero','ay'
+]);
+
+// Profanity & insults: these are NEVER shown in the Commonly Used Words chips
+const BADWORDS = new Set([
+  // English profanity
+  'fuck','fucking','fucked','fucker','fuckers','motherfucker','motherfucking','shit','shitty','bullshit','shits',
+  'bitch','bitches','bitching','asshole','assholes','ass','arse','bastard','bastards','damn','goddamn','dammit',
+  'crap','crappy','dick','dickhead','cock','pussy','cunt','prick','twat','wanker','douche','douchebag','jackass',
+  'dumbass','dumbasses','jerk','jerks','slut','whore','piss','pissed','bollocks','wtf','stfu','hell',
+  // English insults
+  'stupid','idiot','idiots','idiotic','dumb','dumber','dumbest','moron','morons','moronic','imbecile','retard',
+  'retarded','loser','losers','scum','scumbag','freak','freaks','creep','creeps','creepy','psycho','lunatic',
+  // Filipino profanity
+  'putangina','putanginamo','tangina','tanginamo','tanginang','putang','puta','pucha','putsa','punyeta','punyemas',
+  'pakyu','pakshet','bwakanangina','bwaka','hindot','hindutan','kantot','kantutan','iyot','jakol','titi','puke',
+  'pekpek','bilat','tamod','burat','betlog','etits','kiki','tite','pokpok','kingina','amputa','tangna',
+  // Filipino insults
+  'gago','gaga','gagu','kagaguhan','bobo','boba','bubu','kabobohan','tanga','katangahan','engot','ungas','gunggong',
+  'tunggak','hangal','abnoy','ulol','ulul','tarantado','tarantada','kupal','inutil','leche','letse','buwisit',
+  'bwisit','hayop','hayup','peste','demonyo','walanghiya','shet','gagi'
+]);
+
+// Negative sentiment words: complaint words like "slow" or "broken".
+// By default these still SHOW in the chips (admins need to see complaints!).
+// Change false to true below if you want to hide them too.
+const HIDE_NEGATIVE_WORDS = false;
+const NEGATIVE_WORDS = new Set([
+  // English
+  'bad','terrible','horrible','awful','worst','worse','poor','poorly','slow','slowest','sluggish','laggy','lag',
+  'broken','breaks','useless','pointless','worthless','annoying','annoyed','irritating','disappointing',
+  'disappointed','disappointment','frustrating','frustrated','frustration','hate','hated','hating','ugly','boring',
+  'bored','confusing','confused','difficult','complicated','lousy','mediocre','pathetic','rude','unhelpful',
+  'unresponsive','buggy','bug','bugs','glitchy','glitch','glitches','error','errors','failed','failing','failure',
+  'scam','fake','waste','wasted','messy','clunky','outdated','unreliable','unusable','unacceptable','ridiculous',
+  'nonsense','trash','garbage','disgusting','gross','dirty','smelly','neglected','ignored','unprofessional',
+  'dishonest','misleading','overpriced','flimsy','defective','faulty','crash','crashes','crashed',
+  // Filipino
+  'pangit','panget','mabagal','bagal','sira','sirang','palpak','nakakainis','nakakabwisit','nakakadismaya',
+  'nakakahiya','madumi','marumi','mabaho','masama','malala','sablay','bulok','basura','chaka','badtrip','epal',
+  'magulo','makalat','antagal','matagal','hassle','nakakapagod','nakakastress','ayoko'
+]);
+
+// Basic NLP pipeline: tokenize -> normalize -> remove stopwords -> term frequency
+function getTopWords(feedbackList, limit = 10) {
+  const counts = {};
+  feedbackList.forEach(f => {
+    String(f.message || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s']/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOPWORDS.has(w) && !BADWORDS.has(w) && !(HIDE_NEGATIVE_WORDS && NEGATIVE_WORDS.has(w)))
+      .forEach(w => { counts[w] = (counts[w] || 0) + 1; });
+  });
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([word, count]) => ({ word, count }));
+}
+
+function getRatingCounts(feedbackList) {
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  feedbackList.forEach(f => { const r = Number(f.rating); if (counts[r] !== undefined) counts[r] += 1; });
+  return counts;
+}
+
+function getAverageRating(feedbackList) {
+  const rated = feedbackList.filter(f => Number(f.rating) > 0);
+  if (rated.length === 0) return 0;
+  return rated.reduce((s, f) => s + Number(f.rating), 0) / rated.length;
+}
+
+const RatingChart = ({ counts, average, total }) => {
+  const max = Math.max(1, ...Object.values(counts));
+  return (
+    <div style={{ flex: 1, minWidth: 260, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700 }}>Rating Distribution</h3>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Avg: <strong style={{ color: '#d97706' }}>{average.toFixed(1)} ★</strong> ({total} total)
+        </span>
+      </div>
+      {[5, 4, 3, 2, 1].map(star => (
+        <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ width: 34, fontSize: 12.5, color: 'var(--text-mid)', textAlign: 'right' }}>{star} ★</span>
+          <div style={{ flex: 1, background: '#f0f1f3', borderRadius: 99, height: 14, overflow: 'hidden' }}>
+            <div style={{ width: `${(counts[star] / max) * 100}%`, background: '#e8a33d', height: '100%', borderRadius: 99, transition: 'width 0.4s' }} />
+          </div>
+          <span style={{ width: 24, fontSize: 12.5, color: 'var(--text-muted)' }}>{counts[star]}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const CommonWords = ({ words }) => {
+  const max = Math.max(1, ...words.map(w => w.count));
+  return (
+    <div style={{ flex: 1, minWidth: 260, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 18px' }}>
+      <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Commonly Used Words</h3>
+      {words.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Not enough feedback to analyze yet.</p>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          {words.map(({ word, count }) => (
+            <span
+              key={word}
+              title={`Mentioned ${count} time${count > 1 ? 's' : ''}`}
+              style={{
+                background: '#eef6f0', border: '1px solid #cfe5d6', color: '#2f6b46',
+                borderRadius: 99, padding: '5px 12px',
+                fontSize: 12 + Math.round((count / max) * 6),
+                fontWeight: 600, lineHeight: 1.2,
+              }}
+            >
+              {word} <span style={{ opacity: 0.6, fontWeight: 500 }}>x{count}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function CommunityAndCampaigns() {
   const [events, setEvents] = useState([]);
@@ -246,7 +382,27 @@ export default function CommunityAndCampaigns() {
 
   /* ─── Community Feedback ─── */
   const filteredFeedback = feedbackTab === 'ALL' ? feedback : feedback.filter(f => f.category === feedbackTab);
-  const feedbackHeading = (f) => (FEEDBACK_TABS.find(t => t.key === f.category)?.label) || f.category || 'General Feedback';
+ const feedbackHeading = (f) => (FEEDBACK_TABS.find(t => t.key === f.category)?.label) || f.category || 'General Feedback';
+
+ const ratingCounts = getRatingCounts(filteredFeedback);
+  const avgRating = getAverageRating(filteredFeedback);
+  const topWords = getTopWords(filteredFeedback, 10);
+
+  const handleDeleteFeedback = (f) => {
+    setConfirmState({
+      title: 'Delete this feedback?',
+      message: `The feedback from "${f.name || 'Anonymous'}" will be permanently deleted. This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await API.delete(`/feedback/${f.id}`);
+          showToast('Feedback deleted.');
+          setFeedback(prev => prev.filter(x => x.id !== f.id));
+        } catch (err) {
+          showToast(err?.response?.data?.error || 'Failed to delete feedback.');
+        }
+      },
+    });
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -260,8 +416,8 @@ export default function CommunityAndCampaigns() {
         .cc-pin-btn { background: none; border: none; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-mid); cursor: pointer; padding: 7px 4px; white-space: nowrap; }
         .cc-pin-btn:hover { color: var(--primary); }
         .cc-pin-btn.pinned { color: var(--primary); font-weight: 600; }
-        .cc-tab-bar { display: flex; background: #edeef0; border-radius: var(--radius-md); padding: 6px; gap: 4px; }
-        .cc-tab { flex: 1; text-align: center; padding: 9px 10px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-mid); background: transparent; border: none; cursor: pointer; font-family: inherit; font-weight: 500; }
+        .cc-tab-bar { display: flex; flex-wrap: wrap; background: #edeef0; border-radius: var(--radius-md); padding: 6px; gap: 4px; }
+        .cc-tab { flex: 1 1 auto; min-width: 100px; text-align: center; padding: 9px 10px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-mid); background: transparent; border: none; cursor: pointer; font-family: inherit; font-weight: 500; }
         .cc-tab.active { background: #fff; color: var(--text-dark); font-weight: 600; box-shadow: var(--shadow-sm); }
         .cc-list-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 18px; }
         .cc-icon-btn { background: none; border: none; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); cursor: pointer; font-family: inherit; padding: 4px 0; }
@@ -423,17 +579,51 @@ export default function CommunityAndCampaigns() {
         {filteredFeedback.length === 0 ? (
           <div className="empty-state"><div className="empty-icon">💬</div><h3>No feedback in this category yet</h3></div>
         ) : (
-          <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
-            {filteredFeedback.map(f => (
-              <div key={f.id} className="cc-list-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{feedbackHeading(f)}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{f.message} - {f.name}</div>
-                </div>
-                <Stars rating={f.rating} />
-              </div>
-            ))}
-          </div>
+          <>
+            {/* Analytics: rating graph + NLP common words */}
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+              <RatingChart counts={ratingCounts} average={avgRating} total={filteredFeedback.length} />
+              <CommonWords words={topWords} />
+            </div>
+
+            {/* Aligned feedback table */}
+            <div className="cc-table" style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+              <table style={{ tableLayout: 'fixed', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '15%' }}>TYPE</th>
+                    <th style={{ width: '18%' }}>NAME</th>
+                    <th style={{ width: '31%' }}>MESSAGE</th>
+                    <th style={{ width: '13%' }}>RATING</th>
+                    <th style={{ width: '13%' }}>DATE</th>
+                    <th style={{ width: '10%' }}>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFeedback.map(f => (
+                    <tr key={f.id}>
+                      <td style={{ verticalAlign: 'middle' }}><span className="badge badge-green">{feedbackHeading(f)}</span></td>
+                      <td style={{ verticalAlign: 'middle' }}>
+                        <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name || 'Anonymous'}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.email}</div>
+                      </td>
+                      <td style={{ verticalAlign: 'middle', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.message}>{f.message}</td>
+                      <td style={{ verticalAlign: 'middle' }}><Stars rating={f.rating} /></td>
+                      <td style={{ verticalAlign: 'middle', color: 'var(--text-muted)' }}>{fmtDate(f.created_at)}</td>
+                      <td style={{ verticalAlign: 'middle' }}>
+                        <button
+                          style={{ background: 'none', border: 'none', color: '#dc3545', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+                          onClick={() => handleDeleteFeedback(f)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

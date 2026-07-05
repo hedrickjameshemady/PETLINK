@@ -16,7 +16,8 @@ import LostAndFound from './pages/LostAndFound';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PetsAndAdoptions from './pages/admin/PetsAndAdoptions';
-import VolunteersAndDonors from './pages/admin/VolunteersAndDonors';
+import VolunteerRecords from './pages/admin/VolunteerRecords';
+import Donors from './pages/admin/Donors';
 import CommunityAndCampaigns from './pages/admin/CommunityAndCampaigns';
 import AdminLostAndFound from './pages/admin/AdminLostAndFound';
 
@@ -81,7 +82,8 @@ export default function App() {
           <Route path="/admin" element={<ProtectedAdmin><AdminLayout /></ProtectedAdmin>}>
             <Route index element={<AdminDashboard />} />
             <Route path="pets" element={<PetsAndAdoptions />} />
-            <Route path="volunteers" element={<VolunteersAndDonors />} />
+            <Route path="volunteers" element={<VolunteerRecords />} />
+            <Route path="donors" element={<Donors />} />
             <Route path="community" element={<CommunityAndCampaigns />} />
             <Route path="lost-and-found" element={<AdminLostAndFound />} />
           </Route>

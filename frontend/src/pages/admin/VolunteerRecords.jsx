@@ -2,16 +2,12 @@ import { useState, useEffect } from 'react';
 import { API } from '../../context/AuthContext';
 import { ConfirmModal } from '../../components/ConfirmDialog';
 
-// Use your actual uploaded image paths — adjust if your assets folder differs
-import fundRaisingIcon from '../../assets/fund-raising 1.png';
-import bloodDonationIcon from '../../assets/blood-donation 1.png';
 import volunteeringIcon from '../../assets/volunteering 2.png';
 import animalCareIcon from '../../assets/animal-care 1.png';
 
-export default function VolunteersAndDonors() {
+export default function VolunteerRecords() {
   const [volunteers, setVolunteers]   = useState([]);
   const [volApps,    setVolApps]      = useState([]);
-  const [donations,  setDonations]    = useState([]);
   const [loading,    setLoading]      = useState(true);
   const [showAddVol, setShowAddVol]   = useState(false);
   const [viewVol,    setViewVol]      = useState(null);
@@ -22,7 +18,6 @@ export default function VolunteersAndDonors() {
   const [confirmState, setConfirmState] = useState(null);
   const [volFilter,  setVolFilter]    = useState('');
   const [appFilter,  setAppFilter]    = useState('');
-  const [donFilter,  setDonFilter]    = useState('');
   const [volForm, setVolForm] = useState({
     name: '', email: '', phone: '', availability: 'Weekdays', role: '', status: 'Active',
   });
@@ -30,8 +25,6 @@ export default function VolunteersAndDonors() {
   const [stats, setStats] = useState({
     totalVolunteers:  { value: '—', weekDelta: null },
     activeThisMonth:  { value: '—', label: '' },
-    totalDonors:      { value: '—', weekDelta: null },
-    fundRaised:       { value: '—', weekPct: null },
   });
 
   /* ─── FETCH ─── */
@@ -40,14 +33,12 @@ export default function VolunteersAndDonors() {
     Promise.all([
       API.get('/volunteers').catch(() => null),
       API.get('/volunteers/applications').catch(() => null),
-      API.get('/volunteers/donations').catch(() => null),
       API.get('/volunteers/stats').catch(() => null),
-    ]).then(([v, a, d, s]) => {
+    ]).then(([v, a, s]) => {
       if (v) setVolunteers(v.data);
       if (a) setVolApps(a.data);
-      if (d) setDonations(d.data);
       if (s) {
-        const { volunteers: vs, donations: ds } = s.data;
+        const { volunteers: vs } = s.data;
         setStats({
           totalVolunteers: {
             value:     vs.total ?? 0,
@@ -56,14 +47,6 @@ export default function VolunteersAndDonors() {
           activeThisMonth: {
             value: vs.active ?? 0,
             label: 'This week',
-          },
-          totalDonors: {
-            value:     ds.total_donors ?? 0,
-            weekDelta: ds.added_this_week ?? null,
-          },
-          fundRaised: {
-            value:   `₱${Number(ds.raised ?? 0).toLocaleString()}`,
-            weekPct: ds.week_percent ?? null,
           },
         });
       }
@@ -140,17 +123,11 @@ export default function VolunteersAndDonors() {
     !appFilter || a.name?.toLowerCase().includes(appFilter.toLowerCase()) ||
     a.preferred_role?.toLowerCase().includes(appFilter.toLowerCase())
   );
-  const filteredDons = donations.filter(d =>
-    !donFilter || d.donor_name?.toLowerCase().includes(donFilter.toLowerCase()) ||
-    d.type?.toLowerCase().includes(donFilter.toLowerCase())
-  );
-
-
 
   /* ─── HELPERS ─── */
-  const statusBadge = (s) => {
+  const statusBadge = (st) => {
     const map = { Active: 'green', Inactive: 'gray', Pending: 'yellow', Approved: 'green', Rejected: 'red' };
-    return <span className={`badge badge-${map[s] || 'gray'}`}>{s}</span>;
+    return <span className={`badge badge-${map[st] || 'gray'}`}>{st}</span>;
   };
 
   const avatarCircle = (name, bg = 'var(--green-200)', photo = null) => (
@@ -220,22 +197,6 @@ export default function VolunteersAndDonors() {
           icon={animalCareIcon}
           bg="#e3f2fd"
         />
-        <StatCard
-          label="Total Donors"
-          value={stats.totalDonors.value}
-          sub={stats.totalDonors.weekDelta != null ? `+${stats.totalDonors.weekDelta} this week` : null}
-          subColor="#e91e8c"
-          icon={bloodDonationIcon}
-          bg="#fce4ec"
-        />
-        <StatCard
-          label="Fund Raised"
-          value={stats.fundRaised.value}
-          sub={stats.fundRaised.weekPct != null ? `+${stats.fundRaised.weekPct}% this week` : null}
-          subColor="var(--primary)"
-          icon={fundRaisingIcon}
-          bg="#fff3e0"
-        />
       </div>
 
       {/* ─── VOLUNTEER RECORD ─── */}
@@ -253,7 +214,6 @@ export default function VolunteersAndDonors() {
             <button className="btn btn-primary btn-sm" onClick={() => setShowAddVol(true)}>+ Add Volunteer</button>
           </div>
         </div>
-        {/* SCROLL TABLE — same pattern as PetsAndAdoptions */}
         <div style={s.scrollTable}>
           <table style={{ minWidth: 620 }}>
             <thead>
@@ -348,66 +308,6 @@ export default function VolunteersAndDonors() {
                       )}
                       <button style={s.linkBtn} onClick={() => setViewVolApp(a)}>View</button>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ─── DONATIONS RECORD ─── */}
-      <div className="card">
-        <div style={s.tableHeader}>
-          <h2 style={s.sectionTitle}>Donations Record</h2>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              className="form-input"
-              placeholder="Search donor or type…"
-              value={donFilter}
-              onChange={e => setDonFilter(e.target.value)}
-              style={{ height: 32, fontSize: 13, width: 180 }}
-            />
-          </div>
-        </div>
-        <div style={s.scrollTable}>
-          <table style={{ minWidth: 680 }}>
-            <thead>
-              <tr>
-                <th>NAME / EMAIL</th><th>CONTACT</th><th>TYPE</th>
-                <th>AMOUNT</th><th>DATE</th><th>PROOF</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6} style={s.empty}>Loading…</td></tr>
-              ) : filteredDons.length === 0 ? (
-                <tr><td colSpan={6} style={s.empty}>No donations found.</td></tr>
-              ) : filteredDons.map((d, i) => (
-                <tr key={d.id ?? i}>
-                  <td>
-                    <div style={s.nameCell}>
-                      {avatarCircle(d.donor_name, '#fff3e0')}
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{d.donor_name || 'Anonymous'}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.donor_email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>{d.donor_phone || '—'}</td>
-                  <td>{d.type}</td>
-                  <td style={{ fontWeight: 600 }}>
-                    {d.donation_kind === 'Non-Monetary'
-                      ? `${d.item_category || 'Item'}${d.item_quantity ? ` (${d.item_quantity})` : ''} · ${d.handoff_method || '—'}`
-                      : `₱${Number(d.amount ?? 0).toLocaleString()}`}
-                  </td>
-                  <td>{d.donated_at ? new Date(d.donated_at).toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—'}</td>
-                  <td>
-                    {d.proof_file ? (
-                      <a href={`http://localhost:5000${d.proof_file}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 13, textDecoration: 'underline' }}>View Proof</a>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>
-                    )}
                   </td>
                 </tr>
               ))}
@@ -568,10 +468,9 @@ export default function VolunteersAndDonors() {
 
 /* ─── STYLES ─── */
 const s = {
-  statsRow:   { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 },
+  statsRow:   { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 },
   tableHeader:{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sectionTitle:{ fontWeight: 700, fontSize: 16 },
-  /* Same scroll logic as PetsAndAdoptions */
   scrollTable:{ overflowY: 'auto', maxHeight: 280, borderRadius: 8, border: '1px solid var(--border)' },
   nameCell:   { display: 'flex', alignItems: 'center', gap: 10 },
   linkBtn:    { background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: 0 },

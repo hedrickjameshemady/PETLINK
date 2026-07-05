@@ -264,7 +264,10 @@ const weekPct = dons.prevWeek > 0
 
         {/* Donations Received */}
         <div style={{ ...css.card, flex: 1 }}>
-          <div style={css.cardTitle}>Donations received</div>
+          <div style={css.cardHeader}>
+            <span style={css.cardTitle}>Donations received</span>
+            <Link to="/admin/donors" style={css.viewAll}>View All</Link>
+          </div>
           <div style={css.donAmountBox}>
             <div style={css.donAmount}>₱{Number(s.donations?.raised || 0).toLocaleString()}</div>
             <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, marginTop: 4 }}>

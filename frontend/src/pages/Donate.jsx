@@ -363,7 +363,7 @@ export default function Donate() {
                   />
                 </Field>
 
-                <Field label="Upload Proof of Payment" error={errors.proof}>
+                <Field label="Upload Proof of Transaction Record" error={errors.proof}>
                   <FilePicker
                     fileRef={fileRef} proofFile={proofFile}
                     onPick={() => fileRef.current.click()}

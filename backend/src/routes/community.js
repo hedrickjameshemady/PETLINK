@@ -161,6 +161,14 @@ router.get('/feedback', authMiddleware, adminMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Delete feedback (admin)
+router.delete('/feedback/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await db.query('DELETE FROM feedback WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Feedback deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── Announcements & News ───────────────────────────────────────────────────
 // Get all announcements (pinned first, then newest first)
 router.get('/announcements', async (req, res) => {
