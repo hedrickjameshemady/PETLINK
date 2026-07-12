@@ -22,8 +22,19 @@ const uploadProof = multer({ storage: proofStorage, limits: { fileSize: 5 * 1024
 router.get('/', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT v.*, CONCAT(u.first_name, ' ', u.last_name) AS name, u.email, u.phone, u.profile_photo
-      FROM volunteers v JOIN users u ON v.user_id = u.id
+      SELECT v.*, CONCAT(u.first_name, ' ', u.last_name) AS name, u.email, u.phone, u.profile_photo,
+        COALESCE(sch.total_duties, 0)    AS total_duties,
+        COALESCE(sch.hours_completed, 0) AS hours_completed
+      FROM volunteers v
+      JOIN users u ON v.user_id = u.id
+      LEFT JOIN (
+        SELECT volunteer_id,
+               COUNT(*) AS total_duties,
+               ROUND(COALESCE(SUM(CASE WHEN status = 'Completed'
+                 THEN TIME_TO_SEC(TIMEDIFF(time_end, time_start)) / 3600 END), 0), 1) AS hours_completed
+        FROM volunteer_schedules
+        GROUP BY volunteer_id
+      ) sch ON sch.volunteer_id = v.id
       ORDER BY v.created_at DESC
     `);
     res.json(rows);
@@ -45,10 +56,10 @@ router.get('/applications', authMiddleware, adminMiddleware, async (req, res) =>
 // Apply as volunteer (public users)
 router.post('/apply', authMiddleware, async (req, res) => {
   try {
-    const { availability, preferred_role, motivation, experience } = req.body;
+    const { availability, available_time, preferred_role, motivation, experience, volunteering_since } = req.body;
     const [result] = await db.query(
-      'INSERT INTO volunteer_applications (user_id, availability, preferred_role, motivation, experience) VALUES (?,?,?,?,?)',
-      [req.user.id, availability, preferred_role, motivation, experience]
+      'INSERT INTO volunteer_applications (user_id, availability, available_time, preferred_role, motivation, experience, volunteering_since) VALUES (?,?,?,?,?,?,?)',
+      [req.user.id, availability, available_time || null, preferred_role, motivation, experience, volunteering_since || null]
     );
     res.status(201).json({ id: result.insertId, message: 'Volunteer application submitted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -57,7 +68,7 @@ router.post('/apply', authMiddleware, async (req, res) => {
 // ✅ NEW: Admin directly adds a volunteer (bypasses application flow)
 router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { name, email, phone, availability, role, status } = req.body;
+    const { name, email, phone, availability, available_time, role, status } = req.body;
 
     // Check if a user account exists for this email
     const [users] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
@@ -79,8 +90,8 @@ router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
     }
 
     const [result] = await db.query(
-      'INSERT INTO volunteers (user_id, availability, role, status, start_date) VALUES (?,?,?,?,CURDATE())',
-      [userId, availability, role, status || 'Active']
+      'INSERT INTO volunteers (user_id, availability, available_time, role, status, start_date) VALUES (?,?,?,?,?,CURDATE())',
+      [userId, availability, available_time || null, role, status || 'Active']
     );
     res.status(201).json({ id: result.insertId, message: 'Volunteer added successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -89,11 +100,14 @@ router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
 // Approve or Reject volunteer application
 router.patch('/applications/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, criteria } = req.body;
     const [app] = await db.query('SELECT * FROM volunteer_applications WHERE id = ?', [req.params.id]);
     if (app.length === 0) return res.status(404).json({ error: 'Application not found' });
 
-    await db.query('UPDATE volunteer_applications SET status=?, reviewed_by=?, reviewed_at=NOW() WHERE id=?', [status, req.user.id, req.params.id]);
+    await db.query(
+      'UPDATE volunteer_applications SET status=?, criteria_json=?, reviewed_by=?, reviewed_at=NOW() WHERE id=?',
+      [status, criteria && criteria.length ? JSON.stringify(criteria) : null, req.user.id, req.params.id]
+    );
 
 
     if (status === 'Approved') {
@@ -101,17 +115,32 @@ router.patch('/applications/:id/status', authMiddleware, adminMiddleware, async 
       if (existing.length === 0) {
         // Not a volunteer yet — insert them
         await db.query(
-          'INSERT INTO volunteers (user_id, availability, preferred_role, role, status, start_date) VALUES (?,?,?,?,?,CURDATE())',
-          [app[0].user_id, app[0].availability, app[0].preferred_role, app[0].preferred_role, 'Active']
+          'INSERT INTO volunteers (user_id, availability, available_time, preferred_role, role, status, start_date, volunteering_since) VALUES (?,?,?,?,?,?,CURDATE(),?)',
+          [app[0].user_id, app[0].availability, app[0].available_time || null, app[0].preferred_role, app[0].preferred_role, 'Active', app[0].volunteering_since || null]
         );
       } else {
         // Already exists — just update their info to Active
         await db.query(
-          'UPDATE volunteers SET availability=?, role=?, status=?, start_date=CURDATE() WHERE user_id=?',
-          [app[0].availability, app[0].preferred_role, 'Active', app[0].user_id]
+          'UPDATE volunteers SET availability=?, available_time=?, role=?, status=?, start_date=CURDATE(), volunteering_since=? WHERE user_id=?',
+          [app[0].availability, app[0].available_time || null, app[0].preferred_role, 'Active', app[0].volunteering_since || null, app[0].user_id]
         );
       }
     }
+
+    // Drop a message into the applicant's in-app mailbox
+    if (status === 'Approved' || status === 'Rejected') {
+      const notifTitle = status === 'Approved'
+        ? 'Volunteer Application Approved 🎉'
+        : 'Volunteer Application Update';
+      const notifMsg = status === 'Approved'
+        ? 'Congratulations! Your volunteer application has been approved. Welcome to the PETLINK volunteer team — our coordinator will reach out with your first schedule.'
+        : 'Thank you for your interest in volunteering with PETLINK. After careful review, we are unable to approve your application at this time. You are welcome to apply again in the future.';
+      await db.query(
+        'INSERT INTO notifications (user_id, title, message, type) VALUES (?,?,?,?)',
+        [app[0].user_id, notifTitle, notifMsg, 'volunteer']
+      );
+    }
+
     res.json({ message: `Application ${status}` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -119,10 +148,10 @@ router.patch('/applications/:id/status', authMiddleware, adminMiddleware, async 
 // Update volunteer record
 router.put('/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { availability, role, status } = req.body;
+    const { availability, available_time, role, status } = req.body;
     await db.query(
-      'UPDATE volunteers SET availability=?, role=?, status=? WHERE id=?',
-      [availability, role, status, req.params.id]
+      'UPDATE volunteers SET availability=?, available_time=?, role=?, status=? WHERE id=?',
+      [availability, available_time || null, role, status, req.params.id]
     );
     res.json({ message: 'Volunteer updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -133,6 +162,133 @@ router.delete('/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     await db.query('DELETE FROM volunteers WHERE id = ?', [req.params.id]);
     res.json({ message: 'Volunteer removed' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ================== DUTY SCHEDULING ==================
+
+// Does this date fit the volunteer's day availability?
+function dayAllowed(availability, dateStr) {
+  const day = new Date(`${dateStr}T00:00:00`).getDay(); // 0 = Sunday ... 6 = Saturday
+  const weekend = day === 0 || day === 6;
+  if (availability === 'Weekdays') return !weekend;
+  if (availability === 'Weekends') return weekend;
+  return true; // Both / Flexible
+}
+
+// Turn a time-slot label into an [earliest, latest] window
+function slotRange(availableTime) {
+  if (!availableTime) return null;
+  const t = String(availableTime).toLowerCase();
+  if (t.startsWith('morning'))   return ['08:00', '12:00'];
+  if (t.startsWith('afternoon')) return ['12:00', '17:00'];
+  if (t.startsWith('evening'))   return ['17:00', '21:00'];
+  return null; // Whole day = no restriction
+}
+
+// List duties within a date range (for the weekly calendar)
+router.get('/schedules', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    const [rows] = await db.query(
+      `SELECT s.*, CONCAT(u.first_name, ' ', u.last_name) AS volunteer_name
+       FROM volunteer_schedules s
+       JOIN volunteers v ON s.volunteer_id = v.id
+       JOIN users u ON v.user_id = u.id
+       WHERE s.duty_date BETWEEN ? AND ?
+       ORDER BY s.duty_date, s.time_start`,
+      [start, end]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Assign a duty — with availability + double-booking checks
+router.post('/schedules', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { volunteer_id, duty, duty_date, time_start, time_end, notes } = req.body;
+
+    if (!volunteer_id || !duty || !duty_date || !time_start || !time_end) {
+      return res.status(400).json({ error: 'Volunteer, duty, date, and time are required.' });
+    }
+    if (time_end <= time_start) {
+      return res.status(400).json({ error: 'End time must be after start time.' });
+    }
+
+    const [[vol]] = await db.query(
+      `SELECT v.*, CONCAT(u.first_name, ' ', u.last_name) AS name
+       FROM volunteers v JOIN users u ON v.user_id = u.id WHERE v.id = ?`,
+      [volunteer_id]
+    );
+    if (!vol) return res.status(404).json({ error: 'Volunteer not found.' });
+    if (vol.status !== 'Active') return res.status(400).json({ error: `${vol.name} is not an active volunteer.` });
+
+    if (!dayAllowed(vol.availability, duty_date)) {
+      return res.status(400).json({ error: `${vol.name} is only available on ${String(vol.availability).toLowerCase()}.` });
+    }
+    const range = slotRange(vol.available_time);
+    if (range && (time_start < range[0] || time_end > range[1])) {
+      return res.status(400).json({ error: `${vol.name} is only available during: ${vol.available_time}.` });
+    }
+
+    // No double-booking: reject if an existing duty on the same day overlaps this time
+    const [clash] = await db.query(
+      `SELECT id FROM volunteer_schedules
+       WHERE volunteer_id = ? AND duty_date = ? AND status IN ('Scheduled','Completed')
+         AND time_start < ? AND time_end > ?`,
+      [volunteer_id, duty_date, time_end, time_start]
+    );
+    if (clash.length > 0) {
+      return res.status(400).json({ error: `${vol.name} already has a duty that overlaps this time.` });
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO volunteer_schedules (volunteer_id, duty, duty_date, time_start, time_end, notes)
+       VALUES (?,?,?,?,?,?)`,
+      [volunteer_id, duty, duty_date, time_start, time_end, notes || null]
+    );
+    res.status(201).json({ id: result.insertId, message: 'Duty assigned.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Mark a duty Completed / Missed / Cancelled
+router.patch('/schedules/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['Scheduled', 'Completed', 'Missed', 'Cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status.' });
+    }
+    await db.query('UPDATE volunteer_schedules SET status = ? WHERE id = ?', [status, req.params.id]);
+    res.json({ message: `Duty marked ${status}.` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Remove a scheduled duty
+router.delete('/schedules/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await db.query('DELETE FROM volunteer_schedules WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Duty removed.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ================== NOTIFICATIONS ==================
+
+// Get the logged-in user's notifications (newest first)
+router.get('/notifications/my', authMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20',
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Mark all my notifications as read
+router.patch('/notifications/read-all', authMiddleware, async (req, res) => {
+  try {
+    await db.query('UPDATE notifications SET is_read = 1 WHERE user_id = ?', [req.user.id]);
+    res.json({ message: 'All notifications marked read.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -20,6 +20,34 @@ const fmtDate = (d) => (d ? String(d).slice(0, 10) : '—');
 
 const STATUS_BADGE = { Upcoming: 'badge-blue', Active: 'badge-green', Completed: 'badge-gray', Cancelled: 'badge-red' };
 
+const fmtPeso = (n) => '₱' + Number(n || 0).toLocaleString();
+
+// Smart status computed live from dates + amounts (never goes stale)
+const displayStatus = (ev) => {
+  if (ev.status === 'Cancelled') return 'Cancelled';
+  const today = new Date().toISOString().slice(0, 10);
+  const ended = ev.status === 'Completed' || (ev.end_date && String(ev.end_date).slice(0, 10) < today);
+  if (!ended) {
+    if (ev.status === 'Upcoming' && ev.start_date && String(ev.start_date).slice(0, 10) > today) return 'Upcoming';
+    return 'Active';
+  }
+  if (NEEDS_TARGET(ev.type) && Number(ev.target_amount) > 0) {
+    return Number(ev.raised_amount) >= Number(ev.target_amount) ? 'Target Met' : 'Target Not Met';
+  }
+  return 'Finished';
+};
+
+const DISPLAY_STATUS_STYLE = {
+  Upcoming:         { bg: '#e3f2fd', color: '#1565c0' },
+  Active:           { bg: '#e8f5e9', color: '#2e7d32' },
+  'Target Met':     { bg: '#dcfce7', color: '#166534' },
+  'Target Not Met': { bg: '#fdecea', color: '#c62828' },
+  Finished:         { bg: '#f3f4f6', color: '#374151' },
+  Cancelled:        { bg: '#fdecea', color: '#c62828' },
+};
+
+const isFinishedStatus = (ev) => ['Finished', 'Target Met', 'Target Not Met', 'Cancelled'].includes(displayStatus(ev));
+
 const PinIcon = ({ filled }) => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 17v5" />
@@ -314,6 +342,14 @@ export default function CommunityAndCampaigns() {
 
   const filteredEvents = typeFilter === 'All Types' ? events : events.filter(e => e.type === typeFilter);
 
+  // Active/upcoming on top, finished/cancelled sink to the bottom; newest first within each group
+  const sortedEvents = [...filteredEvents].sort((a, b) => {
+    const fa = isFinishedStatus(a) ? 1 : 0;
+    const fb = isFinishedStatus(b) ? 1 : 0;
+    if (fa !== fb) return fa - fb;
+    return new Date(b.start_date || b.created_at || 0) - new Date(a.start_date || a.created_at || 0);
+  });
+
   /* ─── Announcements & News ─── */
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
@@ -457,17 +493,35 @@ export default function CommunityAndCampaigns() {
             <table>
               <thead>
                 <tr>
-                  <th>ID</th><th>EVENT NAME</th><th>DATE</th><th>DESCRIPTION</th><th>TYPE</th><th></th>
+                  <th>ID</th><th>EVENT NAME</th><th>DATE</th><th>DESCRIPTION</th><th>TYPE</th><th>STATUS</th><th></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredEvents.map(ev => (
+                {sortedEvents.map(ev => (
                   <tr key={ev.id}>
                     <td style={{ color: 'var(--text-muted)' }}>EVT-{String(ev.id).padStart(3, '0')}</td>
                     <td style={{ fontWeight: 600 }}>{ev.title}</td>
                     <td>{fmtDate(ev.start_date)}</td>
                     <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ev.description}>{ev.description}</td>
                     <td><span className="badge badge-green">{ev.type}</span></td>
+                    <td>
+                      {(() => {
+                        const ds = displayStatus(ev);
+                        const st = DISPLAY_STATUS_STYLE[ds] || DISPLAY_STATUS_STYLE.Finished;
+                        return (
+                          <div>
+                            <span style={{ background: st.bg, color: st.color, fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+                              {ds}
+                            </span>
+                            {NEEDS_TARGET(ev.type) && Number(ev.target_amount) > 0 && (
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, whiteSpace: 'nowrap' }}>
+                                {fmtPeso(ev.raised_amount)} / {fmtPeso(ev.target_amount)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
                         <button style={styles.linkBtn} onClick={() => openView(ev)}>View</button>

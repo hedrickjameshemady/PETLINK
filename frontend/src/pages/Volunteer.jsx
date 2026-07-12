@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { SuccessModal } from '../components/ConfirmDialog';
 
 const AVAILABILITY = ['Weekdays', 'Weekends', 'Both', 'Flexible'];
+const TIME_SLOTS = ['Morning (8AM-12PM)', 'Afternoon (12PM-5PM)', 'Evening (5PM-9PM)', 'Whole Day (8AM-9PM)'];
 const ROLES = ['Pet Care', 'Adoption Helper', 'Cleaning', 'Admin Support', 'Fundraising', 'Other'];
 
 export default function Volunteer() {
@@ -14,9 +15,11 @@ export default function Volunteer() {
 
   const [form, setForm] = useState({
     availability: '',
+    available_time: '',
     preferred_role: '',
     motivation: '',
     experience: '',
+    volunteering_since: '',
   });
   const [errors, setErrors] = useState({});
   const [account, setAccount] = useState(null);     // name/email/phone from user account
@@ -39,11 +42,15 @@ export default function Volunteer() {
   const validate = () => {
     const e = {};
     if (!form.availability) e.availability = 'Please select your availability.';
+    if (!form.available_time) e.available_time = 'Please select your available time.';
     if (!form.preferred_role) e.preferred_role = 'Please select a preferred role.';
     if (!form.motivation.trim()) e.motivation = 'Please tell us why you want to volunteer.';
     else if (form.motivation.trim().length < 15) e.motivation = 'Please write at least 15 characters.';
     // Experience is optional, but if filled, keep it reasonable
     if (form.experience && form.experience.trim().length > 1000) e.experience = 'Please keep this under 1000 characters.';
+    if (form.volunteering_since && form.volunteering_since > new Date().toISOString().slice(0, 10)) {
+      e.volunteering_since = 'This date cannot be in the future.';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -56,9 +63,11 @@ export default function Volunteer() {
       setLoading(true);
       await API.post('/volunteers/apply', {
         availability: form.availability,
+        available_time: form.available_time,
         preferred_role: form.preferred_role,
         motivation: form.motivation.trim(),
         experience: form.experience.trim(),
+        volunteering_since: form.volunteering_since || null,
       });
       setSubmitted(true);
     } catch (err) {
@@ -154,6 +163,17 @@ export default function Volunteer() {
               </select>
             </Field>
 
+            <Field label="Available Time" required error={errors.available_time}>
+              <select
+                style={inputStyle('available_time')}
+                value={form.available_time}
+                onChange={e => setField('available_time', e.target.value)}
+              >
+                <option value="">Select Available Time</option>
+                {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+
             <Field label="Preferred Role" required error={errors.preferred_role}>
               <select
                 style={inputStyle('preferred_role')}
@@ -172,6 +192,17 @@ export default function Volunteer() {
                 value={form.motivation}
                 onChange={e => setField('motivation', e.target.value)}
               />
+            </Field>
+
+            <Field label="When did you start doing volunteer work?" error={errors.volunteering_since}>
+              <input
+                type="date"
+                style={inputStyle('volunteering_since')}
+                max={new Date().toISOString().slice(0, 10)}
+                value={form.volunteering_since}
+                onChange={e => setField('volunteering_since', e.target.value)}
+              />
+              <span style={styles.hint}>Leave blank if this is your first time volunteering.</span>
             </Field>
 
             <Field label="Experience" error={errors.experience}>

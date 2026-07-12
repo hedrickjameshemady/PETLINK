@@ -6,6 +6,19 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const PET_TYPES = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
 const PET_TYPE_ICONS = { Dog: '🐶', Cat: '🐱', Bird: '🐦', Rabbit: '🐰', Others: '🐾' };
 
+// Lost & found is time-critical: every pending report must be reviewed within 3 hours
+const REVIEW_SLA_HOURS = 3;
+const slaInfo = (r) => {
+  const elapsedMs = Date.now() - new Date(r.created_at).getTime();
+  const leftMs = REVIEW_SLA_HOURS * 3600000 - elapsedMs;
+  const abs = Math.abs(leftMs);
+  const h = Math.floor(abs / 3600000);
+  const m = Math.floor((abs % 3600000) / 60000);
+  return leftMs <= 0
+    ? { overdue: true,  label: `Overdue by ${h}h ${String(m).padStart(2, '0')}m` }
+    : { overdue: false, label: `${h}h ${String(m).padStart(2, '0')}m left` };
+};
+
 // ─── Badges ───────────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const map = {
@@ -299,9 +312,9 @@ function PendingTable({ reports, onView, onApprove, onDelete }) {
     </div>
   );
   return (
-    <ScrollTable headers={['TYPE', 'PET TYPE', 'SOURCE', 'Reporter', 'Description', 'Date', '']}>
+    <ScrollTable headers={['TYPE', 'PET TYPE', 'SOURCE', 'Reporter', 'Description', 'Submitted', 'REVIEW DEADLINE', '']}>
       {reports.map(r => (
-        <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+        <tr key={r.id} style={{ borderBottom: '1px solid var(--border)', background: slaInfo(r).overdue ? '#fff5f5' : 'transparent' }}>
           <td style={td}><TypeBadge type={r.type} /></td>
           <td style={{ ...td, whiteSpace: 'nowrap', fontSize: 13 }}>{PET_TYPE_ICONS[r.pet_type] || '🐾'} {r.pet_type || '—'}</td>
           <td style={td}><SourceBadge source={r.source} /></td>
@@ -318,7 +331,21 @@ function PendingTable({ reports, onView, onApprove, onDelete }) {
             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, color: 'var(--text-mid)' }}>{r.pet_description}</div>
           </td>
           <td style={{ ...td, whiteSpace: 'nowrap', fontSize: 13 }}>
-            {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            {new Date(r.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          </td>
+          <td style={{ ...td, whiteSpace: 'nowrap' }}>
+            {(() => {
+              const sla = slaInfo(r);
+              return (
+                <span style={{
+                  background: sla.overdue ? '#fdecea' : '#fef9c3',
+                  color: sla.overdue ? '#c62828' : '#a16207',
+                  fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
+                }}>
+                  {sla.overdue ? '⚠ ' : '⏳ '}{sla.label}
+                </span>
+              );
+            })()}
           </td>
           <td style={td}>
             <div style={{ display: 'flex', gap: 12 }}>
@@ -448,6 +475,12 @@ function SectionCard({ title, count, borderColor, badge, action, children }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AdminLostAndFound() {
+  // Re-render every minute so the SLA countdowns stay fresh without refreshing the page
+  const [, setSlaTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSlaTick(x => x + 1), 60000);
+    return () => clearInterval(t);
+  }, []);
   const [allReports,  setAllReports]  = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [viewReport,  setViewReport]  = useState(null);
@@ -573,6 +606,27 @@ export default function AdminLostAndFound() {
         borderColor="#fcd34d"
         badge={{ bg: '#fef9c3', color: '#a16207' }}
       >
+        {pendingReports.length > 0 && (() => {
+          const overdueCount = pendingReports.filter(r => slaInfo(r).overdue).length;
+          return (
+            <div style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+              background: overdueCount > 0 ? '#fdecea' : '#fff8e1',
+              border: `1px solid ${overdueCount > 0 ? '#f5c2c0' : '#ffe082'}`,
+              color: overdueCount > 0 ? '#b71c1c' : '#8d6e00',
+              borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14, lineHeight: 1.5,
+            }}>
+              <span style={{ fontSize: 16 }}>🚨</span>
+              <span>
+                <strong>Time-critical:</strong> lost &amp; found reports are emergencies — a missing pet's trail goes cold fast.
+                Every pending report must be reviewed within <strong>{REVIEW_SLA_HOURS} hours</strong> of submission.
+                {overdueCount > 0 && (
+                  <> <strong>{overdueCount} report{overdueCount > 1 ? 's are' : ' is'} past the deadline — review now.</strong></>
+                )}
+              </span>
+            </div>
+          );
+        })()}
         <PendingTable
           reports={pendingReports}
           onView={setViewReport}

@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useState } from 'react';
+import { API, useAuth } from '../context/AuthContext';
+import { useState, useEffect } from 'react';
 
 import logo from '../assets/image 16.png';
 
@@ -9,6 +9,31 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState([]);
+
+  // Fetch notifications when logged in, and refresh every 60 seconds
+  useEffect(() => {
+    if (!user) { setNotifs([]); return; }
+    const load = () => API.get('/volunteers/notifications/my')
+      .then(({ data }) => setNotifs(data))
+      .catch(() => {});
+    load();
+    const timer = setInterval(load, 60000);
+    return () => clearInterval(timer);
+  }, [user]);
+
+  const unread = notifs.filter(n => !n.is_read).length;
+
+  const openNotifs = () => {
+    const next = !notifOpen;
+    setNotifOpen(next);
+    setMenuOpen(false);
+    if (next && unread > 0) {
+      API.patch('/volunteers/notifications/read-all').catch(() => {});
+      setNotifs(prev => prev.map(n => ({ ...n, is_read: 1 })));
+    }
+  };
 
   const links = [
     { to: '/home', label: 'Home' },
@@ -51,8 +76,34 @@ export default function Navbar() {
 
       <div style={styles.actions}>
         {user ? (
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setMenuOpen(!menuOpen)} style={styles.userBtn}>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ position: 'relative' }}>
+              <button onClick={openNotifs} style={styles.bellBtn} title="Notifications">
+                🔔
+                {unread > 0 && <span style={styles.bellBadge}>{unread}</span>}
+              </button>
+              {notifOpen && (
+                <div style={{ ...styles.dropdown, minWidth: 300, maxWidth: 340, maxHeight: 360, overflowY: 'auto' }}>
+                  <div style={{ padding: '10px 14px', fontWeight: 700, fontSize: 13, borderBottom: '1px solid var(--border)' }}>
+                    Notifications
+                  </div>
+                  {notifs.length === 0 ? (
+                    <div style={{ padding: '16px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
+                      No notifications yet.
+                    </div>
+                  ) : notifs.map(n => (
+                    <div key={n.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', background: n.is_read ? 'white' : 'var(--green-50)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{n.title}</div>
+                      <div style={{ fontSize: 12.5, color: 'var(--text-mid)', marginTop: 2, lineHeight: 1.45 }}>{n.message}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                        {new Date(n.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={() => { setMenuOpen(!menuOpen); setNotifOpen(false); }} style={styles.userBtn}>
               <span style={styles.userAvatar}>
                 {user.first_name?.[0]}{user.last_name?.[0]}
               </span>
@@ -181,6 +232,35 @@ loginBtn: {
     fontSize: 14,
     fontWeight: 500,
     cursor: 'pointer',
+  },
+  bellBtn: {
+    position: 'relative',
+    background: 'var(--green-50)',
+    border: '1.5px solid var(--green-200)',
+    borderRadius: '50%',
+    width: 38,
+    height: 38,
+    fontSize: 16,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    background: '#e53935',
+    color: 'white',
+    borderRadius: '50%',
+    minWidth: 17,
+    height: 17,
+    fontSize: 10,
+    fontWeight: 700,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 3px',
   },
   userAvatar: {
     width: 28,
