@@ -20,7 +20,7 @@ const PET_TYPES = ['All', 'Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
 export default function Adopt() {
   const [allPets, setAllPets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [breedFilter, setBreedFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
   const navigate = useNavigate();
 
@@ -39,13 +39,19 @@ export default function Adopt() {
     }
   };
 
-  // Filter by type and search only — no status filter (all shown are Available/Pending)
+  // Breeds actually available right now, narrowed by the selected type tab
+  const breedOptions = [...new Set(
+    allPets
+      .filter(p => (typeFilter === 'All' ? true : p.type === typeFilter))
+      .map(p => (p.breed || '').trim())
+      .filter(Boolean)
+  )].sort();
+
+  // Filter by pet type and breed
   const filteredPets = allPets.filter(pet => {
     const matchesType = typeFilter === 'All' ? true : pet.type === typeFilter;
-    const matchesSearch = search.trim() === '' ? true :
-      pet.name.toLowerCase().includes(search.toLowerCase()) ||
-      (pet.breed || '').toLowerCase().includes(search.toLowerCase());
-    return matchesType && matchesSearch;
+    const matchesBreed = breedFilter === 'All' ? true : (pet.breed || '').trim() === breedFilter;
+    return matchesType && matchesBreed;
   });
 
   // Group filtered pets by type
@@ -73,18 +79,17 @@ export default function Adopt() {
 
         {/* Filters */}
         <div style={styles.filters}>
-          {/* Search */}
+          {/* Breed filter */}
           <div style={styles.searchBox}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input
-              type="text"
-              placeholder="Search by name or breed..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={styles.searchInput}
-            />
+            <span style={{ fontSize: 14, flexShrink: 0 }}>🐾</span>
+            <select
+              value={breedFilter}
+              onChange={e => setBreedFilter(e.target.value)}
+              style={{ ...styles.searchInput, background: 'transparent', cursor: 'pointer' }}
+            >
+              <option value="All">All Breeds</option>
+              {breedOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
           </div>
 
           {/* Type filter tabs */}
@@ -92,7 +97,7 @@ export default function Adopt() {
             {PET_TYPES.map(type => (
               <button
                 key={type}
-                onClick={() => setTypeFilter(type)}
+                onClick={() => { setTypeFilter(type); setBreedFilter('All'); }}
                 style={{
                   ...styles.typeTab,
                   ...(typeFilter === type ? styles.typeTabActive : {}),

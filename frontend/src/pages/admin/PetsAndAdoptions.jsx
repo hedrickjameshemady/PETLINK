@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react';
 import { API } from '../../context/AuthContext';
 import { ConfirmModal } from '../../components/ConfirmDialog';
 
+// Breeds commonly found in the Philippines, per pet type
+const BREEDS_PH = {
+  Dog: ['Aspin (Asong Pinoy)', 'Shih Tzu', 'Poodle', 'Chihuahua', 'Pomeranian', 'Labrador Retriever', 'Golden Retriever', 'German Shepherd', 'Siberian Husky', 'Beagle', 'Dachshund', 'Pug', 'American Bully', 'Rottweiler', 'Corgi', 'Dalmatian'],
+  Cat: ['Puspin (Pusang Pinoy)', 'Persian', 'Siamese', 'British Shorthair', 'American Shorthair', 'Ragdoll', 'Bengal', 'Exotic Shorthair', 'Maine Coon', 'Scottish Fold'],
+  Bird: ['Maya', 'Lovebird', 'Cockatiel', 'Budgerigar (Budgie)', 'Parakeet', 'Cockatoo', 'Dove', 'Pigeon', 'Myna'],
+  Rabbit: ['Native Rabbit', 'Mini Lop', 'Holland Lop', 'Netherland Dwarf', 'Lionhead', 'Rex', 'Flemish Giant', 'Angora'],
+  Other: [],
+};
+
 export default function PetsAndAdoptions() {
   const [pets, setPets] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -25,6 +34,7 @@ export default function PetsAndAdoptions() {
   const [confirmState, setConfirmState] = useState(null);
   const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [] });
   const [petPhotoFile, setPetPhotoFile] = useState(null);
+  const [customBreed, setCustomBreed] = useState(false);
   const [petPhotoPreview, setPetPhotoPreview] = useState(null);
   const [assessForm, setAssessForm] = useState({ pet_id: '', traits: '', description: '', compatibility_notes: '' });
 
@@ -500,7 +510,7 @@ export default function PetsAndAdoptions() {
                 </div>
                 <div className="form-group">
                   <label className="form-label" style={{ fontWeight: 700 }}>Species</label>
-                  <select className="form-select" value={petForm.type} onChange={e => setPetForm({ ...petForm, type: e.target.value })}>
+                  <select className="form-select" value={petForm.type} onChange={e => { setCustomBreed(false); setPetForm({ ...petForm, type: e.target.value, breed: '' }); }}>
                     {['Dog','Cat','Bird','Rabbit','Other'].map(t => <option key={t}>{t}</option>)}
                   </select>
                 </div>
@@ -509,7 +519,27 @@ export default function PetsAndAdoptions() {
               {/* Breed */}
               <div className="form-group">
                 <label className="form-label" style={{ fontWeight: 700 }}>Breed</label>
-                <input className="form-input" value={petForm.breed} onChange={e => setPetForm({ ...petForm, breed: e.target.value })} />
+                <select
+                  className="form-select"
+                  value={customBreed ? '__other__' : petForm.breed}
+                  onChange={e => {
+                    if (e.target.value === '__other__') { setCustomBreed(true); setPetForm({ ...petForm, breed: '' }); }
+                    else { setCustomBreed(false); setPetForm({ ...petForm, breed: e.target.value }); }
+                  }}
+                >
+                  <option value="">Select a breed</option>
+                  {(BREEDS_PH[petForm.type] || []).map(b => <option key={b} value={b}>{b}</option>)}
+                  <option value="__other__">Other / Not listed — type it in</option>
+                </select>
+                {(customBreed || (BREEDS_PH[petForm.type] || []).length === 0) && (
+                  <input
+                    className="form-input"
+                    style={{ marginTop: 8 }}
+                    placeholder="Type the breed"
+                    value={petForm.breed}
+                    onChange={e => setPetForm({ ...petForm, breed: e.target.value })}
+                  />
+                )}
               </div>
 
               {/* Age + Weight + Gender */}
@@ -983,7 +1013,23 @@ export default function PetsAndAdoptions() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Breed</label>
-                  <input className="form-input" value={editForm.breed} onChange={e => setEditForm({ ...editForm, breed: e.target.value })} />
+                  <select
+                    className="form-select"
+                    value={(BREEDS_PH[editForm.type] || []).includes(editForm.breed) ? editForm.breed : '__other__'}
+                    onChange={e => setEditForm({ ...editForm, breed: e.target.value === '__other__' ? '' : e.target.value })}
+                  >
+                    {(BREEDS_PH[editForm.type] || []).map(b => <option key={b} value={b}>{b}</option>)}
+                    <option value="__other__">Other / Not listed — type it in</option>
+                  </select>
+                  {!(BREEDS_PH[editForm.type] || []).includes(editForm.breed) && (
+                    <input
+                      className="form-input"
+                      style={{ marginTop: 8 }}
+                      placeholder="Type the breed"
+                      value={editForm.breed}
+                      onChange={e => setEditForm({ ...editForm, breed: e.target.value })}
+                    />
+                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Age (years)</label>

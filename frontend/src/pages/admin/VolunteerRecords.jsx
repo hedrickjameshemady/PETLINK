@@ -33,6 +33,24 @@ const startOfWeek = (d) => {
   return x;
 };
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
+
+// The 42 days (6 weeks) shown in a month grid, starting on Monday
+const monthGrid = (monthDate) => {
+  const gridStart = startOfWeek(startOfMonth(monthDate));
+  return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+};
+
+// Can this volunteer work on this calendar day?
+const dayAllowedFor = (vol, d) => {
+  if (!vol) return false;
+  const wd = d.getDay(); // 0 = Sunday ... 6 = Saturday
+  const weekend = wd === 0 || wd === 6;
+  if (vol.availability === 'Weekdays') return !weekend;
+  if (vol.availability === 'Weekends') return weekend;
+  return true; // Both / Flexible
+};
 const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const slotRange = (t) => {
@@ -76,7 +94,9 @@ export default function VolunteerRecords() {
 
   /* ─── SCHEDULING STATE ─── */
   const [schedules,  setSchedules]  = useState([]);
-  const [weekStart,  setWeekStart]  = useState(startOfWeek(new Date()));
+  const [calMonth,   setCalMonth]   = useState(startOfMonth(new Date()));
+  const [pickMonth,  setPickMonth]  = useState(startOfMonth(new Date()));
+  const [dutyDetail, setDutyDetail] = useState(null);
   const [showAssign, setShowAssign] = useState(false);
   const [assignForm, setAssignForm] = useState({
     volunteer_id: '', duty: '', duty_date: '', time_start: '09:00', time_end: '12:00', notes: '',
@@ -115,13 +135,14 @@ export default function VolunteerRecords() {
 
   /* ─── FETCH SCHEDULES (re-runs whenever the visible week changes) ─── */
   const loadSchedules = () => {
-    const start = fmtDate(weekStart);
-    const end   = fmtDate(addDays(weekStart, 6));
+    const grid = monthGrid(calMonth);
+    const start = fmtDate(grid[0]);
+    const end   = fmtDate(grid[41]);
     API.get(`/volunteers/schedules?start=${start}&end=${end}`)
       .then(({ data }) => setSchedules(data))
       .catch(() => setSchedules([]));
   };
-  useEffect(() => { loadSchedules(); }, [weekStart]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadSchedules(); }, [calMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -201,6 +222,7 @@ export default function VolunteerRecords() {
   const handleScheduleStatus = async (id, status) => {
     try { await API.patch(`/volunteers/schedules/${id}/status`, { status }); } catch { /* demo */ }
     setSchedules(prev => prev.map(sc => sc.id === id ? { ...sc, status } : sc));
+    setDutyDetail(null);
     showToast(`Duty marked ${status}.`);
     // Refresh masterlist so hours/duty counts update
     API.get('/volunteers').then(({ data }) => setVolunteers(data)).catch(() => {});
@@ -449,58 +471,135 @@ export default function VolunteerRecords() {
         </div>
       </div>
 
-      {/* ─── DUTY SCHEDULE (weekly calendar) ─── */}
+      {/* ─── DUTY SCHEDULE (monthly calendar) ─── */}
       <div className="card">
         <div style={s.tableHeader}>
           <h2 style={s.sectionTitle}>Duty Schedule</h2>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className="btn btn-outline btn-sm" onClick={() => setWeekStart(addDays(weekStart, -7))}>‹ Prev</button>
-            <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {weekStart.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
-              {' – '}
-              {addDays(weekStart, 6).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+            <button className="btn btn-outline btn-sm" onClick={() => setCalMonth(addMonths(calMonth, -1))}>‹</button>
+            <span style={{ fontSize: 14, fontWeight: 700, minWidth: 130, textAlign: 'center' }}>
+              {calMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}
             </span>
-            <button className="btn btn-outline btn-sm" onClick={() => setWeekStart(addDays(weekStart, 7))}>Next ›</button>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowAssign(true)}>+ Assign Duty</button>
+            <button className="btn btn-outline btn-sm" onClick={() => setCalMonth(addMonths(calMonth, 1))}>›</button>
+            <button className="btn btn-outline btn-sm" onClick={() => setCalMonth(startOfMonth(new Date()))}>Today</button>
+            <button className="btn btn-primary btn-sm" onClick={() => { setPickMonth(startOfMonth(new Date())); setShowAssign(true); }}>+ Assign Duty</button>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, overflowX: 'auto' }}>
-          {[0, 1, 2, 3, 4, 5, 6].map(i => {
-            const day = addDays(weekStart, i);
+
+        {/* Weekday header */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '2px solid var(--border)', marginBottom: 2 }}>
+          {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(d => (
+            <div key={d} style={{ padding: '8px 6px', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textAlign: 'center', letterSpacing: '0.04em' }}>
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Month grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+          {monthGrid(calMonth).map((day, i) => {
             const dayStr = fmtDate(day);
-            const daySchedules = schedules.filter(sc => String(sc.duty_date).slice(0, 10) === dayStr);
+            const inMonth = day.getMonth() === calMonth.getMonth();
             const isToday = dayStr === fmtDate(new Date());
+            const daySchedules = schedules.filter(sc => String(sc.duty_date).slice(0, 10) === dayStr);
             return (
-              <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8, minHeight: 130, minWidth: 105, background: isToday ? '#f0f9f1' : 'white' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: isToday ? 'var(--primary)' : 'var(--text-dark)' }}>
-                  {day.toLocaleDateString('en-PH', { weekday: 'short' })} {day.getDate()}
+              <div
+                key={i}
+                onClick={() => {
+                  if (!inMonth) return;
+                  setAssignForm(f => ({ ...f, duty_date: dayStr }));
+                  setPickMonth(startOfMonth(day));
+                  setShowAssign(true);
+                }}
+                style={{
+                  minHeight: 108,
+                  padding: 6,
+                  borderRadius: 8,
+                  background: !inMonth ? '#fafafa' : isToday ? '#f0f9f1' : 'white',
+                  border: isToday ? '1.5px solid var(--primary)' : '1px solid var(--border)',
+                  opacity: inMonth ? 1 : 0.45,
+                  cursor: inMonth ? 'pointer' : 'default',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5, color: isToday ? 'var(--primary)' : 'var(--text-mid)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{day.getDate()}</span>
+                  {daySchedules.length > 0 && (
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>{daySchedules.length}</span>
+                  )}
                 </div>
-                {daySchedules.length === 0 && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</div>
-                )}
-                {daySchedules.map(sc => (
-                  <div key={sc.id} style={{ background: SCHED_COLORS[sc.status] || '#eee', borderRadius: 6, padding: '5px 7px', marginBottom: 5, fontSize: 11 }}>
-                    <div style={{ fontWeight: 700 }}>{sc.duty}</div>
-                    <div>{sc.volunteer_name}</div>
-                    <div style={{ color: 'var(--text-muted)' }}>
-                      {String(sc.time_start).slice(0, 5)}–{String(sc.time_end).slice(0, 5)}
-                    </div>
-                    {sc.status === 'Scheduled' ? (
-                      <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
-                        <button style={{ ...s.linkBtn, fontSize: 11, color: '#2e7d32' }} onClick={() => handleScheduleStatus(sc.id, 'Completed')}>Done</button>
-                        <button style={{ ...s.linkBtn, fontSize: 11, color: '#e65100' }} onClick={() => handleScheduleStatus(sc.id, 'Missed')}>Missed</button>
-                        <button style={{ ...s.linkBtn, fontSize: 11, color: '#e53935' }} onClick={() => handleDeleteSchedule(sc)}>✕</button>
-                      </div>
-                    ) : (
-                      <div style={{ fontWeight: 600, marginTop: 2 }}>{sc.status}</div>
-                    )}
+                {daySchedules.slice(0, 3).map(sc => (
+                  <div
+                    key={sc.id}
+                    onClick={e => { e.stopPropagation(); setDutyDetail(sc); }}
+                    title={`${sc.duty} — ${sc.volunteer_name}`}
+                    style={{
+                      background: SCHED_COLORS[sc.status] || '#eee',
+                      borderLeft: `3px solid ${sc.status === 'Completed' ? '#2e7d32' : sc.status === 'Missed' ? '#e65100' : sc.status === 'Cancelled' ? '#c62828' : '#1565c0'}`,
+                      borderRadius: 5, padding: '3px 6px', marginBottom: 3,
+                      fontSize: 11, lineHeight: 1.3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>{String(sc.time_start).slice(0, 5)}</span> {sc.duty} · {sc.volunteer_name?.split(' ')[0]}
                   </div>
                 ))}
+                {daySchedules.length > 3 && (
+                  <div
+                    onClick={e => { e.stopPropagation(); setDutyDetail(daySchedules[3]); }}
+                    style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--primary)', cursor: 'pointer', paddingLeft: 2 }}
+                  >
+                    +{daySchedules.length - 3} more
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+
+        {/* Legend */}
+        <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 11.5, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+          {Object.entries(SCHED_COLORS).map(([k, c]) => (
+            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: c, display: 'inline-block', border: '1px solid var(--border)' }} />{k}
+            </span>
+          ))}
+          <span style={{ marginLeft: 'auto' }}>Tip: click a day to assign a duty · click a duty to manage it</span>
+        </div>
       </div>
+
+      {/* DUTY DETAIL MODAL */}
+      {dutyDetail && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDutyDetail(null)}>
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{dutyDetail.duty}</h2>
+              <button className="modal-close" onClick={() => setDutyDetail(null)}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
+              {[['Volunteer', dutyDetail.volunteer_name],
+                ['Date', String(dutyDetail.duty_date).slice(0, 10)],
+                ['Time', `${String(dutyDetail.time_start).slice(0, 5)} – ${String(dutyDetail.time_end).slice(0, 5)}`],
+                ['Status', dutyDetail.status],
+                ['Notes', dutyDetail.notes || '—']].map(([l, v]) => (
+                <div key={l} style={s.detailRow}>
+                  <span style={s.detailLbl}>{l}</span>
+                  <span>{v}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              {dutyDetail.status === 'Scheduled' && (
+                <>
+                  <button className="btn btn-success btn-sm" onClick={() => handleScheduleStatus(dutyDetail.id, 'Completed')}>✓ Done</button>
+                  <button className="btn btn-outline btn-sm" onClick={() => handleScheduleStatus(dutyDetail.id, 'Missed')}>Missed</button>
+                </>
+              )}
+              <button className="btn btn-danger btn-sm" onClick={() => { setDutyDetail(null); handleDeleteSchedule(dutyDetail); }}>Remove</button>
+              <button className="btn btn-outline btn-sm" onClick={() => setDutyDetail(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ASSIGN DUTY MODAL */}
       {showAssign && (() => {
@@ -508,9 +607,11 @@ export default function VolunteerRecords() {
         const warn = selVol && assignForm.duty_date
           ? availabilityWarning(selVol, assignForm.duty_date, assignForm.time_start, assignForm.time_end)
           : null;
+        const roleMismatch = selVol && assignForm.duty && selVol.role &&
+          assignForm.duty.toLowerCase() !== String(selVol.role).toLowerCase();
         return (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAssign(false)}>
-            <div className="modal">
+            <div className="modal" style={{ maxWidth: 520 }}>
               <div className="modal-header">
                 <h2 className="modal-title">Assign Duty</h2>
                 <button className="modal-close" onClick={() => setShowAssign(false)}>✕</button>
@@ -519,29 +620,102 @@ export default function VolunteerRecords() {
                 <div className="form-group">
                   <label className="form-label">Volunteer *</label>
                   <select className="form-select" required value={assignForm.volunteer_id}
-                    onChange={e => setAssignForm({ ...assignForm, volunteer_id: e.target.value })}>
+                    onChange={e => {
+                      const vid = e.target.value;
+                      const v = volunteers.find(x => String(x.id) === String(vid));
+                      setAssignForm(f => ({
+                        ...f,
+                        volunteer_id: vid,
+                        duty: f.duty || (v?.role && DUTIES.includes(v.role) ? v.role : f.duty),
+                        duty_date: f.duty_date && v && !dayAllowedFor(v, new Date(`${f.duty_date}T00:00:00`)) ? '' : f.duty_date,
+                      }));
+                    }}>
                     <option value="">Select a volunteer</option>
                     {volunteers.filter(v => v.status === 'Active').map(v => (
                       <option key={v.id} value={v.id}>
-                        {v.name} — {v.availability}{v.available_time ? `, ${v.available_time}` : ''}
+                        {v.name} — {v.role || 'No role'} · {v.availability}{v.available_time ? `, ${v.available_time}` : ''}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                <div className="form-group">
+                  <label className="form-label">Duty *</label>
+                  <select className="form-select" required value={assignForm.duty}
+                    onChange={e => setAssignForm({ ...assignForm, duty: e.target.value })}>
+                    <option value="">Select a duty</option>
+                    {DUTIES.map(d => (
+                      <option key={d} value={d}>
+                        {d}{selVol?.role === d ? '  ★ their role' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {roleMismatch && (
+                    <div style={{ fontSize: 12, color: '#8d6e00', marginTop: 5 }}>
+                      💡 {selVol.name.split(' ')[0]} applied as <strong>{selVol.role}</strong>. Assigning a different duty is allowed — just make sure they're briefed.
+                    </div>
+                  )}
+                </div>
+
+                {/* DATE PICKER — only days matching the volunteer's availability are clickable */}
+                <div className="form-group">
+                  <label className="form-label">
+                    Date * {assignForm.duty_date && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>— {assignForm.duty_date}</span>}
+                  </label>
+                  {!selVol ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', background: '#f9fafb', border: '1px dashed var(--border)', borderRadius: 8, padding: '14px 12px', textAlign: 'center' }}>
+                      Select a volunteer first — the calendar will unlock only the days they're available.
+                    </div>
+                  ) : (
+                    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setPickMonth(addMonths(pickMonth, -1))}>‹</button>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>
+                          {pickMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}
+                        </span>
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setPickMonth(addMonths(pickMonth, 1))}>›</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+                        {['M', 'T', 'W', 'T2', 'F', 'S', 'S2'].map(d => (
+                          <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', padding: '2px 0' }}>{d.replace('2', '')}</div>
+                        ))}
+                        {monthGrid(pickMonth).map((day, i) => {
+                          const dayStr = fmtDate(day);
+                          const inMonth = day.getMonth() === pickMonth.getMonth();
+                          const past = dayStr < fmtDate(new Date());
+                          const allowed = inMonth && !past && dayAllowedFor(selVol, day);
+                          const selected = assignForm.duty_date === dayStr;
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              disabled={!allowed}
+                              onClick={() => setAssignForm({ ...assignForm, duty_date: dayStr })}
+                              style={{
+                                padding: '7px 0', fontSize: 12.5, borderRadius: 6, cursor: allowed ? 'pointer' : 'not-allowed',
+                                border: selected ? '1.5px solid var(--primary)' : '1px solid transparent',
+                                background: selected ? 'var(--primary)' : allowed ? 'var(--green-50)' : 'transparent',
+                                color: selected ? 'white' : allowed ? 'var(--text-dark)' : '#c5c9cd',
+                                fontWeight: selected ? 700 : allowed ? 600 : 400,
+                                opacity: inMonth ? 1 : 0,
+                                pointerEvents: inMonth ? 'auto' : 'none',
+                              }}
+                            >
+                              {day.getDate()}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 6 }}>
+                        {selVol.availability === 'Weekends' ? 'Only weekends are selectable for this volunteer.'
+                          : selVol.availability === 'Weekdays' ? 'Only weekdays are selectable for this volunteer.'
+                          : 'This volunteer is available any day.'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <div className="form-group">
-                    <label className="form-label">Duty *</label>
-                    <select className="form-select" required value={assignForm.duty}
-                      onChange={e => setAssignForm({ ...assignForm, duty: e.target.value })}>
-                      <option value="">Select a duty</option>
-                      {DUTIES.map(d => <option key={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Date *</label>
-                    <input className="form-input" type="date" required value={assignForm.duty_date}
-                      onChange={e => setAssignForm({ ...assignForm, duty_date: e.target.value })} />
-                  </div>
                   <div className="form-group">
                     <label className="form-label">Start Time *</label>
                     <input className="form-input" type="time" required value={assignForm.time_start}
@@ -566,15 +740,13 @@ export default function VolunteerRecords() {
                 )}
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                   <button type="button" className="btn btn-outline" onClick={() => setShowAssign(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary" disabled={!!warn}>Assign Duty</button>
+                  <button type="submit" className="btn btn-primary" disabled={!!warn || !assignForm.duty_date}>Assign Duty</button>
                 </div>
               </form>
             </div>
           </div>
         );
       })()}
-
-      {/* ════════════════ MODALS ════════════════ */}
 
       {/* ADD VOLUNTEER */}
       {showAddVol && (

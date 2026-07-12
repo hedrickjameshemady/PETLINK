@@ -57,6 +57,14 @@ export default function Community() {
 
   const isFund = (c) => (c.type === 'Fundraiser' || c.type === 'Drive') && c.target_amount;
 
+  // Users only see events that are still alive: hide Completed, Cancelled, and past-end-date events
+  const isOver = (c) => {
+    if (c.status === 'Completed' || c.status === 'Cancelled') return true;
+    const today = new Date().toISOString().slice(0, 10);
+    return !!(c.end_date && String(c.end_date).slice(0, 10) < today);
+  };
+  const visibleCampaigns = campaigns.filter(c => !isOver(c));
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
@@ -77,7 +85,7 @@ export default function Community() {
 
         {loading ? (
           <div className="loading-spinner"><div className="spinner" /></div>
-        ) : campaigns.length === 0 ? (
+        ) : visibleCampaigns.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📢</div>
             <h3>No events yet</h3>
@@ -85,7 +93,7 @@ export default function Community() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center' }}>
-            {campaigns.map(c => (
+            {visibleCampaigns.map(c => (
               <div key={c.id} style={st.card}>
                 {/* Left: text */}
                 <div style={st.cardBody}>

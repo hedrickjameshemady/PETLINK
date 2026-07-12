@@ -21,6 +21,7 @@ export default function Donors() {
   const [kindFilter,setKindFilter]= useState('Monetary');
   const [showAdd,   setShowAdd]   = useState(false);
   const [viewDon,   setViewDon]   = useState(null);
+  const [proofView, setProofView] = useState(null);
   const [toast,     setToast]     = useState('');
   const [saving,    setSaving]    = useState(false);
   const [form,      setForm]      = useState(EMPTY_FORM);
@@ -265,7 +266,10 @@ export default function Donors() {
                       <td>{d.donated_at ? new Date(d.donated_at).toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—'}</td>
                       <td>
                         {d.proof_file ? (
-                          <a href={`http://localhost:5000${d.proof_file}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 13, textDecoration: 'underline' }}>View Proof</a>
+                          <button
+                            onClick={() => setProofView(d)}
+                            style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                          >View Proof</button>
                         ) : (
                           <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>
                         )}
@@ -296,6 +300,44 @@ export default function Donors() {
       </div>
 
       {/* ════════════════ MODALS ════════════════ */}
+
+    {/* PROOF OF PAYMENT */}
+      {proofView && (
+        <div
+          className="modal-overlay"
+          onClick={e => e.target === e.currentTarget && setProofView(null)}
+          style={{ background: 'rgba(0,0,0,0.75)' }}
+        >
+          <div style={{ maxWidth: 560, width: '92%', background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>Proof of Payment</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                  {proofView.donor_name || 'Anonymous'} · ₱{Number(proofView.amount ?? 0).toLocaleString()}
+                </div>
+              </div>
+              <button className="modal-close" onClick={() => setProofView(null)}>✕</button>
+            </div>
+            <div style={{ background: '#1a1a1a', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 240, maxHeight: '65vh', overflow: 'auto' }}>
+              <img
+                src={`http://localhost:5000${proofView.proof_file}`}
+                alt="Proof of payment"
+                style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain', display: 'block' }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 18px' }}>
+              
+                href={`http://localhost:5000${proofView.proof_file}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-outline btn-sm"
+                style={{ textDecoration: 'none' }}
+              <a>Open full size</a>
+              <button className="btn btn-primary btn-sm" onClick={() => setProofView(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ADD DONATION */}
       {showAdd && (

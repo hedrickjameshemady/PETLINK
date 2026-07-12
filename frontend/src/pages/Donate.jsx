@@ -363,6 +363,30 @@ export default function Donate() {
                   />
                 </Field>
 
+                {/* Where to send the money */}
+                <div style={{
+                  background: '#f0f9f1', border: '1.5px solid var(--primary)', borderRadius: 12,
+                  padding: '16px 18px', display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap',
+                }}>
+                  <div style={{ fontSize: 28 }}>📱</div>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-dark)', marginBottom: 2 }}>
+                      Send your donation via GCash
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--primary)' }}>
+                      0935 331 3599
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Account name: PETLINK Animal Shelter — then upload your receipt below.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText('09353313599')}
+                    style={{ border: '1.5px solid var(--primary)', background: 'white', color: 'var(--primary)', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >Copy number</button>
+                </div>
+
                 <Field label="Upload Proof of Transaction Record" error={errors.proof}>
                   <FilePicker
                     fileRef={fileRef} proofFile={proofFile}
