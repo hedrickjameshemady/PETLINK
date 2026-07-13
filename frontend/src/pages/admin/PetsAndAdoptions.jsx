@@ -11,6 +11,24 @@ const BREEDS_PH = {
   Other: [],
 };
 
+// ─── SPECIES CAPABILITY RULES ───
+// Not every animal can be neutered, and each species gets different vaccines.
+// canNeuter: false  → we HIDE the neuter checkbox entirely for that species.
+const SPECIES_RULES = {
+  Dog:    { canNeuter: true,  vaccines: ['Rabies', '5-in-1 (DHLPP)', '6-in-1', 'Bordetella (Kennel Cough)', 'Leptospirosis', 'Canine Influenza', 'Deworming'] },
+  Cat:    { canNeuter: true,  vaccines: ['Rabies', '3-in-1 (FVRCP)', '4-in-1', 'Feline Leukemia (FeLV)', 'Feline Immunodeficiency (FIV)', 'Deworming'] },
+  Rabbit: { canNeuter: true,  vaccines: ['Myxomatosis', 'RHDV (Rabbit Haemorrhagic Disease)', 'Pasteurella', 'Deworming'] },
+  // Birds are not neutered in normal shelter practice — hide the checkbox.
+  Bird:   { canNeuter: false, vaccines: ['Polyomavirus', 'Pacheco\'s Disease', 'Avian Pox', 'Newcastle Disease', 'Deworming'] },
+  Other:  { canNeuter: false, vaccines: ['Rabies', 'Deworming', 'Other (specify)'] },
+};
+
+// Safe getter — if someone adds a new species later this won't crash.
+const rulesFor = (type) => SPECIES_RULES[type] || SPECIES_RULES.Other;
+
+// Icons for the pet-type filter chips
+const TYPE_ICONS = { All: '✨', Dog: '🐶', Cat: '🐱', Bird: '🐦', Rabbit: '🐰', Other: '🐾' };
+
 export default function PetsAndAdoptions() {
   const [pets, setPets] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -37,6 +55,11 @@ export default function PetsAndAdoptions() {
   const [customBreed, setCustomBreed] = useState(false);
   const [petPhotoPreview, setPetPhotoPreview] = useState(null);
   const [assessForm, setAssessForm] = useState({ pet_id: '', traits: '', description: '', compatibility_notes: '' });
+  const [petErrors, setPetErrors] = useState({});     // validation messages for ADD form
+  const [editErrors, setEditErrors] = useState({});   // validation messages for EDIT form
+  const [petTypeFilter, setPetTypeFilter] = useState('All'); // Dog / Cat / Bird / ...
+  const [petSearch, setPetSearch] = useState('');
+  const [petStatusFilter, setPetStatusFilter] = useState('All');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -61,28 +84,133 @@ export default function PetsAndAdoptions() {
     setTimeout(() => setToast(''), 3000);
   };
 
+  // The blank starting form — kept in one place so Add + Reset always match.
+  const EMPTY_PET = { name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [] };
+
+  /**
+   * Checks a pet form and returns an object of { fieldName: "error message" }.
+   * If the object is EMPTY, the form is valid.
+   * Medical records stay OPTIONAL — we only validate them IF the user filled them in.
+   */
+  const validatePet = (f) => {
+    const err = {};
+    const today = new Date().toISOString().slice(0, 10);
+
+    // ── Required fields ──
+    if (!f.name || !f.name.trim()) err.name = 'Pet name is required.';
+    else if (f.name.trim().length < 2) err.name = 'Name must be at least 2 characters.';
+    else if (!/^[A-Za-z0-9\s'.\-]+$/.test(f.name.trim())) err.name = 'Name can only contain letters, numbers, spaces, apostrophes, and hyphens.';
+
+    if (!f.type) err.type = 'Please pick a species.';
+    if (!f.breed || !f.breed.trim()) err.breed = 'Breed is required (pick one or type it in).';
+    if (!f.gender) err.gender = 'Please pick a gender.';
+
+    // ── Age: required, must be a sensible number ──
+    if (f.age_years === '' || f.age_years === null || f.age_years === undefined) {
+      err.age_years = 'Age is required.';
+    } else {
+      const age = Number(f.age_years);
+      if (Number.isNaN(age)) err.age_years = 'Age must be a number.';
+      else if (age < 0) err.age_years = 'Age cannot be negative.';
+      else if (age > 30) err.age_years = 'Age looks too high (max 30 years).';
+    }
+
+    // ── Weight: OPTIONAL, but if given it must be a valid decimal ──
+    if (f.weight !== '' && f.weight !== null && f.weight !== undefined) {
+      const w = Number(f.weight);
+      if (Number.isNaN(w)) err.weight = 'Weight must be a number.';
+      else if (w <= 0) err.weight = 'Weight must be greater than 0.';
+      else if (w > 200) err.weight = 'Weight looks too high (max 200 kg).';
+      else if (!/^\d{1,3}(\.\d{1,2})?$/.test(String(f.weight))) err.weight = 'Use up to 2 decimal places (e.g. 4.75).';
+    }
+
+    // ── Intake date: OPTIONAL, but cannot be in the future ──
+    if (f.intake_date && f.intake_date > today) err.intake_date = 'Intake date cannot be in the future.';
+
+    // ═══ MEDICAL RECORDS — ALL OPTIONAL ═══
+    // We ONLY complain if the admin ticked a box and then left the details blank.
+
+    // Neuter date is only required IF they ticked "neutered"
+    if (f.neutered && rulesFor(f.type).canNeuter) {
+      if (f.neutered_date && f.neutered_date > today) err.neutered_date = 'Neuter date cannot be in the future.';
+    }
+
+    // Vaccines are only required IF they ticked "vaccinated"
+    if (f.vaccination_status) {
+      const log = f.vaccine_log || [];
+      if (log.length === 0) {
+        err.vaccine_log = 'You ticked "Vaccinated" — please add at least one vaccine, or untick the box.';
+      } else {
+        const blank = log.some(v => !v.name || !v.name.trim());
+        if (blank) err.vaccine_log = 'Every vaccine row needs a vaccine name selected.';
+        const future = log.some(v => v.date && v.date > today);
+        if (future) err.vaccine_log = 'Vaccine dates cannot be in the future.';
+        const names = log.map(v => (v.name || '').trim().toLowerCase()).filter(Boolean);
+        if (new Set(names).size !== names.length) err.vaccine_log = 'You added the same vaccine twice.';
+      }
+    }
+
+    if (f.last_checkup_date && f.last_checkup_date > today) err.last_checkup_date = 'Checkup date cannot be in the future.';
+    if (f.medical_notes && f.medical_notes.length > 500) err.medical_notes = 'Medical notes must be under 500 characters.';
+    if (f.description && f.description.length > 1000) err.description = 'Description must be under 1000 characters.';
+
+    return err;
+  };
+
+  /** Turns a pet form object into FormData the backend can read. */
+  const buildPetFormData = (form) => {
+    const canNeuter = rulesFor(form.type).canNeuter;
+    const fd = new FormData();
+
+    Object.entries(form).forEach(([k, v]) => {
+      if (k === 'traits' || k === 'vaccine_log') return;    // handled below
+      if (k === 'vaccination_status' || k === 'neutered') return; // handled below
+      if (k === 'neutered_date') return;                     // handled below
+      if (v === undefined || v === null) return;
+      fd.append(k, v);
+    });
+
+    fd.append('traits', JSON.stringify(form.traits || []));
+
+    // Booleans MUST be sent as the literal words "true"/"false".
+    // The backend now checks for the word "true" — so "false" correctly becomes 0.
+    const isNeutered = canNeuter ? !!form.neutered : false; // birds can never be neutered
+    const isVaccinated = !!form.vaccination_status;
+
+    fd.append('neutered', isNeutered ? 'true' : 'false');
+    fd.append('vaccination_status', isVaccinated ? 'true' : 'false');
+    fd.append('neutered_date', isNeutered ? (form.neutered_date || '') : '');
+    fd.append('vaccine_log', isVaccinated ? JSON.stringify(form.vaccine_log || []) : '');
+
+    return fd;
+  };
+
   const handleAddPet = async (e) => {
     e.preventDefault();
+
+    // 1. Check the form first. If bad, show the red messages and STOP.
+    const errs = validatePet(petForm);
+    setPetErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      showToast('Please fix the highlighted fields.', true);
+      return;
+    }
+
+    // 2. Send it.
     try {
-      const formData = new FormData();
-      Object.entries(petForm).forEach(([k, v]) => {
-        if (k === 'traits') formData.append(k, JSON.stringify(v || []));
-        else if (k === 'vaccine_log') formData.append(k, JSON.stringify(v || []));
-        else if (v !== undefined && v !== null) formData.append(k, v);
-      });
+      const formData = buildPetFormData(petForm);
       if (petPhotoFile) formData.append('photo', petPhotoFile);
       await API.post('/pets', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast('Pet added successfully!');
       setShowAddPet(false);
+      setPetForm(EMPTY_PET);
+      setPetErrors({});
+      setPetPhotoFile(null);
+      setPetPhotoPreview(null);
       fetchAll();
-    } catch {
-      setPets(prev => [...prev, { id: Date.now(), pet_id: `PET00${prev.length + 1}`, ...petForm, age_years: Number(petForm.age_years) }]);
-      showToast('Pet added (demo mode)!');
-      setShowAddPet(false);
+    } catch (err) {
+      showToast(err?.response?.data?.error || 'Failed to add pet.', true);
     }
-    setPetForm({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [] });
-    setPetPhotoFile(null);
-    setPetPhotoPreview(null);
   };
 
   const openProfile = async (userId) => {
@@ -163,23 +291,28 @@ export default function PetsAndAdoptions() {
 
   const handleEditPet = async (e) => {
     e.preventDefault();
+
+    // Same rulebook as Add — one function, two forms. No more mismatch.
+    const errs = validatePet(editForm);
+    setEditErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      showToast('Please fix the highlighted fields.', true);
+      return;
+    }
+
     try {
-      const formData = new FormData();
-      Object.entries(editForm).forEach(([k, v]) => {
-        if (k === 'vaccine_log') formData.append(k, JSON.stringify(v || []));
-        else if (v !== undefined && v !== null) formData.append(k, v === false ? 'false' : v);
-      });
+      const formData = buildPetFormData(editForm);
       if (editPhotoFile) formData.append('photo', editPhotoFile);
       await API.put(`/pets/${editPet.id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast('Pet updated successfully!');
+      setEditPet(null);
+      setEditErrors({});
+      setEditPhotoFile(null);
+      setEditPhotoPreview(null);
       fetchAll();
-    } catch {
-      setPets(prev => prev.map(p => p.id === editPet.id ? { ...p, ...editForm } : p));
-      showToast('Pet updated (demo mode)!');
+    } catch (err) {
+      showToast(err?.response?.data?.error || 'Failed to update pet.', true);
     }
-    setEditPet(null);
-    setEditPhotoFile(null);
-    setEditPhotoPreview(null);
   };
 
   const handleDeletePet = (pet) => {
@@ -233,7 +366,33 @@ export default function PetsAndAdoptions() {
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
 
-  const activePets = pets.filter(p => p.status !== 'Adopted').sort((a, b) => a.pet_id.localeCompare(b.pet_id));
+  // Base list: everything not yet adopted
+  const allActivePets = pets.filter(p => p.status !== 'Adopted').sort((a, b) => (a.pet_id || '').localeCompare(b.pet_id || ''));
+
+  // Now apply the admin's filter chips + search box
+  const activePets = allActivePets.filter(p => {
+    const okType = petTypeFilter === 'All' ? true : (p.type || 'Other') === petTypeFilter;
+    const okStatus = petStatusFilter === 'All' ? true : p.status === petStatusFilter;
+    const q = petSearch.trim().toLowerCase();
+    const okSearch = !q ? true :
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.breed || '').toLowerCase().includes(q) ||
+      (p.pet_id || '').toLowerCase().includes(q);
+    return okType && okStatus && okSearch;
+  });
+
+  // Count how many of each species we have, so the chips can show numbers like "Dog 4"
+  const typeCounts = allActivePets.reduce((acc, p) => {
+    const t = p.type || 'Other';
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+
+  // Group the filtered pets by species so the table has clear section headers
+  const TYPE_ORDER = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other'];
+  const petGroups = TYPE_ORDER
+    .map(t => ({ type: t, items: activePets.filter(p => (p.type || 'Other') === t) }))
+    .filter(g => g.items.length > 0);
   const pendingApps = applications.filter(a => a.status === 'Pending Review');
   const finishedApps = applications.filter(a => a.status !== 'Pending Review');
 
@@ -258,7 +417,8 @@ export default function PetsAndAdoptions() {
       </td>
       <td>{pet.type}</td>
       <td>{pet.breed}</td>
-      <td>{pet.age_years} year{pet.age_years !== 1 ? 's' : ''} old</td>
+      <td>{pet.age_years ?? '—'} year{pet.age_years !== 1 ? 's' : ''} old</td>
+      <td>{pet.weight ? `${Number(pet.weight)} kg` : '—'}</td>
       <td>{statusBadge(pet.health_status)}</td>
       <td>{statusBadge(pet.status)}</td>
       <td>
@@ -269,6 +429,16 @@ export default function PetsAndAdoptions() {
       </td>
     </tr>
   );
+
+  // A small red line that appears under a field when it fails validation.
+  const ErrMsg = ({ msg }) => msg ? (
+    <div style={{ color: '#dc3545', fontSize: 12, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span>⚠</span><span>{msg}</span>
+    </div>
+  ) : null;
+
+  // Red border when a field is invalid
+  const errStyle = (msg) => msg ? { borderColor: '#dc3545', background: '#fef2f2' } : {};
 
   const appRow = (app) => (
     <tr key={app.id}>
@@ -324,22 +494,106 @@ export default function PetsAndAdoptions() {
       <div className="card">
         <div style={styles.tableHeader}>
           <h2 style={styles.sectionTitle}>Pet Records Table</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-outline btn-sm">▾ Filter</button>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowAddPet(true)}>+ Add New Pet</button>
+          <button className="btn btn-primary btn-sm" onClick={() => { setPetForm(EMPTY_PET); setPetErrors({}); setPetPhotoFile(null); setPetPhotoPreview(null); setCustomBreed(false); setShowAddPet(true); }}>+ Add New Pet</button>
+        </div>
+
+        {/* ─── FILTER BAR ─── */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 16, paddingBottom: 14, borderBottom: '1.5px solid var(--border)' }}>
+
+          {/* Species chips */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {['All', 'Dog', 'Cat', 'Bird', 'Rabbit', 'Other'].map(t => {
+              const active = petTypeFilter === t;
+              const count = t === 'All' ? allActivePets.length : (typeCounts[t] || 0);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setPetTypeFilter(t)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
+                    border: active ? '1.5px solid var(--primary)' : '1.5px solid #d1d5db',
+                    background: active ? 'var(--primary)' : '#fff',
+                    color: active ? '#fff' : '#555',
+                    fontWeight: active ? 700 : 500,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span>{TYPE_ICONS[t]}</span>
+                  <span>{t}</span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, minWidth: 18, textAlign: 'center',
+                    padding: '1px 5px', borderRadius: 10,
+                    background: active ? 'rgba(255,255,255,0.28)' : '#f1f5f9',
+                    color: active ? '#fff' : '#64748b',
+                  }}>{count}</span>
+                </button>
+              );
+            })}
           </div>
+
+          <div style={{ flex: 1 }} />
+
+          {/* Status dropdown */}
+          <select
+            className="form-select"
+            value={petStatusFilter}
+            onChange={e => setPetStatusFilter(e.target.value)}
+            style={{ maxWidth: 160, fontSize: 13, padding: '7px 10px' }}
+          >
+            <option value="All">All Statuses</option>
+            <option value="Available">Available</option>
+            <option value="Pending">Pending</option>
+            <option value="Not Available">Not Available</option>
+          </select>
+
+          {/* Search box */}
+          <input
+            className="form-input"
+            placeholder="🔍 Search name, breed, or ID…"
+            value={petSearch}
+            onChange={e => setPetSearch(e.target.value)}
+            style={{ maxWidth: 220, fontSize: 13, padding: '7px 10px' }}
+          />
+
+          {(petTypeFilter !== 'All' || petStatusFilter !== 'All' || petSearch) && (
+            <button
+              type="button"
+              onClick={() => { setPetTypeFilter('All'); setPetStatusFilter('All'); setPetSearch(''); }}
+              style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Clear
+            </button>
+          )}
         </div>
-        <div style={styles.subLabel}>Active Pets</div>
-        <div style={styles.scrollTable}>
-          <table>
-            <thead><tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>HEALTH</th><th>STATUS</th><th></th></tr></thead>
-            <tbody>
-              {activePets.length === 0
-                ? <tr><td colSpan={7} style={styles.emptyCell}>No active pets.</td></tr>
-                : activePets.map(petRow)}
-            </tbody>
-          </table>
+
+        {/* Result count */}
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 10 }}>
+          Showing <strong style={{ color: 'var(--text-dark)' }}>{activePets.length}</strong> of {allActivePets.length} active pets
         </div>
+
+        {/* ─── GROUPED TABLES (one section per species) ─── */}
+        {activePets.length === 0 ? (
+          <div className="empty-state" style={{ padding: '32px 0' }}>
+            <div className="empty-icon">🐾</div>
+            <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>No pets match your filters.</div>
+          </div>
+        ) : petGroups.map(group => (
+          <div key={group.type} style={{ marginBottom: 22 }}>
+            <div style={{ ...styles.subLabel, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>{TYPE_ICONS[group.type]}</span>
+              <span>{group.type}s</span>
+              <span className="badge badge-gray">{group.items.length}</span>
+            </div>
+            <div style={styles.scrollTable}>
+              <table>
+                <thead><tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>WEIGHT</th><th>HEALTH</th><th>STATUS</th><th></th></tr></thead>
+                <tbody>{group.items.map(petRow)}</tbody>
+              </table>
+            </div>
+          </div>
+        ))}
         <div style={{ ...styles.subLabel, marginTop: 24 }}>Adopted Pets — Post-Adoption Monitoring</div>
         <div style={styles.scrollTable}>
           <table>
@@ -505,12 +759,37 @@ export default function PetsAndAdoptions() {
               {/* Pet Name + Species */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Pet Name</label>
-                  <input className="form-input" value={petForm.name} onChange={e => setPetForm({ ...petForm, name: e.target.value })} required />
+                  <label className="form-label" style={{ fontWeight: 700 }}>Pet Name <span style={{ color: '#dc3545' }}>*</span></label>
+                  <input
+                    className="form-input"
+                    style={errStyle(petErrors.name)}
+                    value={petForm.name}
+                    onChange={e => { setPetForm({ ...petForm, name: e.target.value }); setPetErrors({ ...petErrors, name: '' }); }}
+                  />
+                  <ErrMsg msg={petErrors.name} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Species</label>
-                  <select className="form-select" value={petForm.type} onChange={e => { setCustomBreed(false); setPetForm({ ...petForm, type: e.target.value, breed: '' }); }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Species <span style={{ color: '#dc3545' }}>*</span></label>
+                  <select
+                    className="form-select"
+                    value={petForm.type}
+                    onChange={e => {
+                      const newType = e.target.value;
+                      setCustomBreed(false);
+                      // Changing species RESETS the medical section — a bird's vaccines
+                      // make no sense for a dog, and birds can't be neutered at all.
+                      setPetForm({
+                        ...petForm,
+                        type: newType,
+                        breed: '',
+                        neutered: rulesFor(newType).canNeuter ? petForm.neutered : false,
+                        neutered_date: rulesFor(newType).canNeuter ? petForm.neutered_date : '',
+                        vaccine_log: [],
+                        vaccination_status: false,
+                      });
+                      setPetErrors({});
+                    }}
+                  >
                     {['Dog','Cat','Bird','Rabbit','Other'].map(t => <option key={t}>{t}</option>)}
                   </select>
                 </div>
@@ -534,26 +813,42 @@ export default function PetsAndAdoptions() {
                 {(customBreed || (BREEDS_PH[petForm.type] || []).length === 0) && (
                   <input
                     className="form-input"
-                    style={{ marginTop: 8 }}
+                    style={{ marginTop: 8, ...errStyle(petErrors.breed) }}
                     placeholder="Type the breed"
                     value={petForm.breed}
-                    onChange={e => setPetForm({ ...petForm, breed: e.target.value })}
+                    onChange={e => { setPetForm({ ...petForm, breed: e.target.value }); setPetErrors({ ...petErrors, breed: '' }); }}
                   />
                 )}
+                <ErrMsg msg={petErrors.breed} />
               </div>
 
               {/* Age + Weight + Gender */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Age</label>
-                  <input className="form-input" type="number" min="0" placeholder="yrs" value={petForm.age_years} onChange={e => setPetForm({ ...petForm, age_years: e.target.value })} />
+                  <label className="form-label" style={{ fontWeight: 700 }}>Age <span style={{ color: '#dc3545' }}>*</span></label>
+                  <input
+                    className="form-input"
+                    type="number" min="0" max="30" step="1" placeholder="yrs"
+                    style={errStyle(petErrors.age_years)}
+                    value={petForm.age_years}
+                    onChange={e => { setPetForm({ ...petForm, age_years: e.target.value }); setPetErrors({ ...petErrors, age_years: '' }); }}
+                  />
+                  <ErrMsg msg={petErrors.age_years} />
                 </div>
                 <div className="form-group">
                   <label className="form-label" style={{ fontWeight: 700 }}>Weight</label>
-                  <input className="form-input" type="number" min="0" placeholder="kg" value={petForm.weight} onChange={e => setPetForm({ ...petForm, weight: e.target.value })} />
+                  {/* step="0.01" is what lets you type 4.75 instead of only whole numbers */}
+                  <input
+                    className="form-input"
+                    type="number" min="0" max="200" step="0.01" placeholder="e.g. 4.75"
+                    style={errStyle(petErrors.weight)}
+                    value={petForm.weight}
+                    onChange={e => { setPetForm({ ...petForm, weight: e.target.value }); setPetErrors({ ...petErrors, weight: '' }); }}
+                  />
+                  <ErrMsg msg={petErrors.weight} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Gender</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Gender <span style={{ color: '#dc3545' }}>*</span></label>
                   <select className="form-select" value={petForm.gender} onChange={e => setPetForm({ ...petForm, gender: e.target.value })}>
                     <option>Male</option><option>Female</option>
                   </select>
@@ -606,7 +901,14 @@ export default function PetsAndAdoptions() {
                 </div>
                 <div className="form-group">
                   <label className="form-label" style={{ fontWeight: 700 }}>Intake Date</label>
-                  <input className="form-input" type="date" value={petForm.intake_date} onChange={e => setPetForm({ ...petForm, intake_date: e.target.value })} />
+                  <input
+                    className="form-input" type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    style={errStyle(petErrors.intake_date)}
+                    value={petForm.intake_date}
+                    onChange={e => { setPetForm({ ...petForm, intake_date: e.target.value }); setPetErrors({ ...petErrors, intake_date: '' }); }}
+                  />
+                  <ErrMsg msg={petErrors.intake_date} />
                 </div>
               </div>
 
@@ -622,46 +924,133 @@ export default function PetsAndAdoptions() {
                 />
               </div>
 
-              {/* Medical Records */}
+              {/* ─── MEDICAL RECORDS (all optional, and species-aware) ─── */}
               <div style={{ borderTop: '1.5px solid #e5e7eb', paddingTop: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: 'var(--text-dark)' }}>
-                  🏥 Medical Records <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-muted)' }}>(optional — leave blank if not yet checked up)</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-dark)' }}>🏥 Medical Records</span>
+                  <span className="badge badge-gray" style={{ fontSize: 11 }}>Optional</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+                  Leave everything blank if this {petForm.type.toLowerCase()} hasn't been checked up yet.
                 </div>
 
-                {/* Neutered toggle + date */}
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', marginBottom: 8 }}>
-                    <input type="checkbox" checked={!!petForm.neutered} onChange={e => setPetForm({ ...petForm, neutered: e.target.checked, neutered_date: e.target.checked ? petForm.neutered_date : '' })} />
-                    <span style={{ fontWeight: 700 }}>✂️ Neutered / Spayed</span>
-                  </label>
-                  {petForm.neutered && (
-                    <div className="form-group" style={{ marginLeft: 24 }}>
-                      <label className="form-label">Date of Neutering / Spaying</label>
-                      <input className="form-input" type="date" value={petForm.neutered_date} onChange={e => setPetForm({ ...petForm, neutered_date: e.target.value })} style={{ maxWidth: 220 }} />
-                    </div>
-                  )}
-                </div>
+                {/* NEUTER — only shown for species that CAN be neutered.
+                    For Birds/Other the whole checkbox disappears. */}
+                {rulesFor(petForm.type).canNeuter ? (
+                  <div style={{ marginBottom: 14, padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={petForm.neutered === true}
+                        onChange={e => setPetForm({ ...petForm, neutered: e.target.checked, neutered_date: e.target.checked ? petForm.neutered_date : '' })}
+                      />
+                      <span style={{ fontWeight: 700 }}>✂️ Neutered / Spayed</span>
+                    </label>
+                    {petForm.neutered === true && (
+                      <div className="form-group" style={{ marginLeft: 24, marginTop: 10 }}>
+                        <label className="form-label">Date of Neutering / Spaying <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span></label>
+                        <input
+                          className="form-input" type="date"
+                          max={new Date().toISOString().slice(0, 10)}
+                          style={{ maxWidth: 220, ...errStyle(petErrors.neutered_date) }}
+                          value={petForm.neutered_date}
+                          onChange={e => { setPetForm({ ...petForm, neutered_date: e.target.value }); setPetErrors({ ...petErrors, neutered_date: '' }); }}
+                        />
+                        <ErrMsg msg={petErrors.neutered_date} />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: 14, padding: '10px 12px', background: '#f1f5f9', borderRadius: 8, fontSize: 12.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>ℹ️</span>
+                    <span>Neutering / spaying is not tracked for <strong>{petForm.type}s</strong> — this section is hidden.</span>
+                  </div>
+                )}
 
-                {/* Vaccination toggle + log */}
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', marginBottom: 8 }}>
-                    <input type="checkbox" checked={!!petForm.vaccination_status} onChange={e => setPetForm({ ...petForm, vaccination_status: e.target.checked, vaccine_log: e.target.checked ? petForm.vaccine_log : [] })} />
+                {/* VACCINATION — the vaccine names are now a DROPDOWN,
+                    and the list changes depending on the species. */}
+                <div style={{ marginBottom: 14, padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={petForm.vaccination_status === true}
+                      onChange={e => setPetForm({
+                        ...petForm,
+                        vaccination_status: e.target.checked,
+                        // Ticking it gives you one blank row to fill in. Unticking wipes the list.
+                        vaccine_log: e.target.checked ? [{ name: '', date: '' }] : [],
+                      })}
+                    />
                     <span style={{ fontWeight: 700 }}>💉 Vaccinated</span>
                   </label>
-                  {petForm.vaccination_status && (
-                    <div style={{ marginLeft: 24 }}>
-                      {(petForm.vaccine_log || []).map((v, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                          <input className="form-input" placeholder="Vaccine name (e.g. Rabies)" value={v.name} onChange={e => { const log = [...petForm.vaccine_log]; log[i] = { ...log[i], name: e.target.value }; setPetForm({ ...petForm, vaccine_log: log }); }} style={{ flex: 1 }} />
-                          <input className="form-input" type="date" value={v.date} onChange={e => { const log = [...petForm.vaccine_log]; log[i] = { ...log[i], date: e.target.value }; setPetForm({ ...petForm, vaccine_log: log }); }} style={{ width: 160 }} />
-                          <button type="button" onClick={() => setPetForm({ ...petForm, vaccine_log: petForm.vaccine_log.filter((_, idx) => idx !== i) })} style={{ background: 'none', border: 'none', color: '#dc3545', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
-                        </div>
-                      ))}
-                      <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 2 }} onClick={() => setPetForm({ ...petForm, vaccine_log: [...(petForm.vaccine_log || []), { name: '', date: '' }] })}>+ Add Vaccine</button>
+
+                  {petForm.vaccination_status === true && (
+                    <div style={{ marginLeft: 24, marginTop: 10 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                        Vaccines available for <strong>{petForm.type}s</strong>:
+                      </div>
+
+                      {(petForm.vaccine_log || []).map((v, i) => {
+                        // Vaccines already picked in OTHER rows — so you can't add Rabies twice.
+                        const taken = (petForm.vaccine_log || []).filter((_, idx) => idx !== i).map(x => x.name);
+                        return (
+                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                            <select
+                              className="form-select"
+                              value={v.name}
+                              onChange={e => {
+                                const log = [...petForm.vaccine_log];
+                                log[i] = { ...log[i], name: e.target.value };
+                                setPetForm({ ...petForm, vaccine_log: log });
+                                setPetErrors({ ...petErrors, vaccine_log: '' });
+                              }}
+                              style={{ flex: 1, fontSize: 13 }}
+                            >
+                              <option value="">— Select a vaccine —</option>
+                              {rulesFor(petForm.type).vaccines.map(name => (
+                                <option key={name} value={name} disabled={taken.includes(name)}>
+                                  {name}{taken.includes(name) ? ' (already added)' : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              className="form-input" type="date"
+                              max={new Date().toISOString().slice(0, 10)}
+                              value={v.date || ''}
+                              onChange={e => {
+                                const log = [...petForm.vaccine_log];
+                                log[i] = { ...log[i], date: e.target.value };
+                                setPetForm({ ...petForm, vaccine_log: log });
+                                setPetErrors({ ...petErrors, vaccine_log: '' });
+                              }}
+                              style={{ width: 155, fontSize: 13 }}
+                            />
+                            <button
+                              type="button"
+                              title="Remove this vaccine"
+                              onClick={() => setPetForm({ ...petForm, vaccine_log: petForm.vaccine_log.filter((_, idx) => idx !== i) })}
+                              style={{ background: 'none', border: 'none', color: '#dc3545', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}
+                            >×</button>
+                          </div>
+                        );
+                      })}
+
+                      <ErrMsg msg={petErrors.vaccine_log} />
+
+                      {/* Hide "+ Add Vaccine" once every vaccine for this species is used up */}
+                      {(petForm.vaccine_log || []).length < rulesFor(petForm.type).vaccines.length && (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          style={{ marginTop: 4 }}
+                          onClick={() => setPetForm({ ...petForm, vaccine_log: [...(petForm.vaccine_log || []), { name: '', date: '' }] })}
+                        >+ Add Vaccine</button>
+                      )}
                     </div>
                   )}
                 </div>
 
+                {/* Checkup / vet — kept for EVERY species, even birds */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 700 }}>Veterinary Name</label>
@@ -674,16 +1063,43 @@ export default function PetsAndAdoptions() {
                 </div>
                 <div className="form-group" style={{ marginTop: 4 }}>
                   <label className="form-label" style={{ fontWeight: 700 }}>Last Checkup Date</label>
-                  <input className="form-input" type="date" value={petForm.last_checkup_date} onChange={e => setPetForm({ ...petForm, last_checkup_date: e.target.value })} />
+                  <input
+                    className="form-input" type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    style={errStyle(petErrors.last_checkup_date)}
+                    value={petForm.last_checkup_date}
+                    onChange={e => { setPetForm({ ...petForm, last_checkup_date: e.target.value }); setPetErrors({ ...petErrors, last_checkup_date: '' }); }}
+                  />
+                  <ErrMsg msg={petErrors.last_checkup_date} />
                 </div>
                 <div className="form-group" style={{ marginTop: 4 }}>
                   <label className="form-label" style={{ fontWeight: 700 }}>Medical Notes / Conditions</label>
-                  <textarea className="form-textarea" placeholder="e.g. No known conditions, previously treated for mange" value={petForm.medical_notes} onChange={e => setPetForm({ ...petForm, medical_notes: e.target.value })} style={{ minHeight: 70 }} />
+                  <textarea
+                    className="form-textarea"
+                    placeholder="e.g. No known conditions, previously treated for mange"
+                    maxLength={500}
+                    style={{ minHeight: 70, ...errStyle(petErrors.medical_notes) }}
+                    value={petForm.medical_notes}
+                    onChange={e => { setPetForm({ ...petForm, medical_notes: e.target.value }); setPetErrors({ ...petErrors, medical_notes: '' }); }}
+                  />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', marginTop: 2 }}>
+                    {(petForm.medical_notes || '').length}/500
+                  </div>
+                  <ErrMsg msg={petErrors.medical_notes} />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4, marginBottom: 4 }}>
-                <button type="submit" className="btn btn-primary" style={{ minWidth: 120, margin: 0 }}>Add</button>
+              {/* ─── FOOTER BUTTONS (matches the Edit modal now) ─── */}
+              <div style={{
+                display: 'flex', gap: 10, justifyContent: 'flex-end',
+                borderTop: '1.5px solid #e5e7eb', paddingTop: 16, marginTop: 4,
+              }}>
+                <button type="button" className="btn btn-outline" onClick={() => { setShowAddPet(false); setPetErrors({}); }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ minWidth: 150 }}>
+                  🐾 Add Pet
+                </button>
               </div>
 
             </form>
@@ -733,18 +1149,20 @@ export default function PetsAndAdoptions() {
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>No medical records yet.</div>
                 ) : (
                   <>
-                    {/* Neutered status */}
-                    <div style={styles.detailRow}>
-                      <span style={styles.detailLbl}>Neutered / Spayed</span>
-                      {viewPet.neutered ? (
-                        <span>
-                          <span className="badge badge-blue">✂️ Yes</span>
-                          {viewPet.neutered_date && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>{new Date(viewPet.neutered_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
-                        </span>
-                      ) : (
-                        <span className="badge badge-gray">Not Neutered</span>
-                      )}
-                    </div>
+                    {/* Neutered status — hidden for species that can't be neutered */}
+                    {rulesFor(viewPet.type).canNeuter && (
+                      <div style={styles.detailRow}>
+                        <span style={styles.detailLbl}>Neutered / Spayed</span>
+                        {viewPet.neutered ? (
+                          <span>
+                            <span className="badge badge-blue">✂️ Yes</span>
+                            {viewPet.neutered_date && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>{new Date(viewPet.neutered_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
+                          </span>
+                        ) : (
+                          <span className="badge badge-gray">Not Neutered</span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Vaccination status + log */}
                     <div style={styles.detailRow}>
@@ -780,7 +1198,43 @@ export default function PetsAndAdoptions() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
-              <button className="btn btn-outline btn-sm" onClick={() => { setViewPet(null); setEditPet(viewPet); setEditForm({ name: viewPet.name, type: viewPet.type, breed: viewPet.breed, age_years: viewPet.age_years, gender: viewPet.gender, health_status: viewPet.health_status, status: viewPet.status, description: viewPet.description || '', vet_name: viewPet.vet_name || '', clinic_name: viewPet.clinic_name || '', last_checkup_date: viewPet.last_checkup_date || '', vaccines_given: viewPet.vaccines_given || '', medical_notes: viewPet.medical_notes || '', vaccination_status: !!viewPet.vaccination_status, neutered: !!viewPet.neutered, neutered_date: viewPet.neutered_date || '', vaccine_log: (() => { try { return viewPet.vaccine_log ? (typeof viewPet.vaccine_log === 'string' ? JSON.parse(viewPet.vaccine_log) : viewPet.vaccine_log) : []; } catch { return []; } })() }); setEditPhotoFile(null); setEditPhotoPreview(null); }}>Edit</button>
+              <button className="btn btn-outline btn-sm" onClick={() => {
+                setViewPet(null);
+                setEditPet(viewPet);
+                setEditErrors({});
+                // Pull EVERY field the Add form has, so the two forms look the same.
+                setEditForm({
+                  name: viewPet.name || '',
+                  type: viewPet.type || 'Dog',
+                  breed: viewPet.breed || '',
+                  age_years: viewPet.age_years ?? '',
+                  weight: viewPet.weight ?? '',
+                  color: viewPet.color || '',
+                  intake_date: viewPet.intake_date ? String(viewPet.intake_date).slice(0, 10) : '',
+                  gender: viewPet.gender || 'Male',
+                  health_status: viewPet.health_status || 'Good',
+                  status: viewPet.status || 'Available',
+                  description: viewPet.description || '',
+                  vet_name: viewPet.vet_name || '',
+                  clinic_name: viewPet.clinic_name || '',
+                  last_checkup_date: viewPet.last_checkup_date ? String(viewPet.last_checkup_date).slice(0, 10) : '',
+                  vaccines_given: viewPet.vaccines_given || '',
+                  medical_notes: viewPet.medical_notes || '',
+                  vaccination_status: viewPet.vaccination_status === 1 || viewPet.vaccination_status === true,
+                  neutered: viewPet.neutered === 1 || viewPet.neutered === true,
+                  neutered_date: viewPet.neutered_date ? String(viewPet.neutered_date).slice(0, 10) : '',
+                  vaccine_log: (() => {
+                    try {
+                      const raw = viewPet.vaccine_log;
+                      if (!raw) return [];
+                      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                      return Array.isArray(parsed) ? parsed : [];
+                    } catch { return []; }
+                  })(),
+                });
+                setEditPhotoFile(null);
+                setEditPhotoPreview(null);
+              }}>Edit</button>
               <button className="btn btn-outline btn-sm" onClick={() => setViewPet(null)}>Close</button>
             </div>
           </div>
@@ -965,7 +1419,7 @@ export default function PetsAndAdoptions() {
               {editPhotoPreview || editPet.photo ? (
                 <>
                   <img
-                    src={editPhotoPreview || editPet.photo}
+                    src={editPhotoPreview || (editPet.photo ? `http://localhost:5000${editPet.photo}` : '')}
                     alt={editPet.name}
                     style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }}
                   />
@@ -999,129 +1453,318 @@ export default function PetsAndAdoptions() {
               }}
             />
 
-            <form onSubmit={handleEditPet} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form onSubmit={handleEditPet} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Pet Name + Species — same layout as Add */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label">Pet Name *</label>
-                  <input className="form-input" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
+                  <label className="form-label" style={{ fontWeight: 700 }}>Pet Name <span style={{ color: '#dc3545' }}>*</span></label>
+                  <input
+                    className="form-input"
+                    style={errStyle(editErrors.name)}
+                    value={editForm.name || ''}
+                    onChange={e => { setEditForm({ ...editForm, name: e.target.value }); setEditErrors({ ...editErrors, name: '' }); }}
+                  />
+                  <ErrMsg msg={editErrors.name} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Type *</label>
-                  <select className="form-select" value={editForm.type} onChange={e => setEditForm({ ...editForm, type: e.target.value })}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Species <span style={{ color: '#dc3545' }}>*</span></label>
+                  <select
+                    className="form-select"
+                    value={editForm.type}
+                    onChange={e => {
+                      const newType = e.target.value;
+                      setEditForm({
+                        ...editForm,
+                        type: newType,
+                        breed: '',
+                        neutered: rulesFor(newType).canNeuter ? editForm.neutered : false,
+                        neutered_date: rulesFor(newType).canNeuter ? editForm.neutered_date : '',
+                        vaccine_log: [],
+                        vaccination_status: false,
+                      });
+                      setEditErrors({});
+                    }}
+                  >
                     {['Dog','Cat','Bird','Rabbit','Other'].map(t => <option key={t}>{t}</option>)}
                   </select>
                 </div>
+              </div>
+
+              {/* Breed */}
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 700 }}>Breed <span style={{ color: '#dc3545' }}>*</span></label>
+                <select
+                  className="form-select"
+                  value={(BREEDS_PH[editForm.type] || []).includes(editForm.breed) ? editForm.breed : '__other__'}
+                  onChange={e => {
+                    setEditForm({ ...editForm, breed: e.target.value === '__other__' ? '' : e.target.value });
+                    setEditErrors({ ...editErrors, breed: '' });
+                  }}
+                >
+                  <option value="">Select a breed</option>
+                  {(BREEDS_PH[editForm.type] || []).map(b => <option key={b} value={b}>{b}</option>)}
+                  <option value="__other__">Other / Not listed — type it in</option>
+                </select>
+                {!(BREEDS_PH[editForm.type] || []).includes(editForm.breed) && (
+                  <input
+                    className="form-input"
+                    style={{ marginTop: 8, ...errStyle(editErrors.breed) }}
+                    placeholder="Type the breed"
+                    value={editForm.breed || ''}
+                    onChange={e => { setEditForm({ ...editForm, breed: e.target.value }); setEditErrors({ ...editErrors, breed: '' }); }}
+                  />
+                )}
+                <ErrMsg msg={editErrors.breed} />
+              </div>
+
+              {/* Age + Weight + Gender — Weight now exists here too, and takes decimals */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label">Breed</label>
-                  <select
-                    className="form-select"
-                    value={(BREEDS_PH[editForm.type] || []).includes(editForm.breed) ? editForm.breed : '__other__'}
-                    onChange={e => setEditForm({ ...editForm, breed: e.target.value === '__other__' ? '' : e.target.value })}
-                  >
-                    {(BREEDS_PH[editForm.type] || []).map(b => <option key={b} value={b}>{b}</option>)}
-                    <option value="__other__">Other / Not listed — type it in</option>
-                  </select>
-                  {!(BREEDS_PH[editForm.type] || []).includes(editForm.breed) && (
-                    <input
-                      className="form-input"
-                      style={{ marginTop: 8 }}
-                      placeholder="Type the breed"
-                      value={editForm.breed}
-                      onChange={e => setEditForm({ ...editForm, breed: e.target.value })}
-                    />
-                  )}
+                  <label className="form-label" style={{ fontWeight: 700 }}>Age <span style={{ color: '#dc3545' }}>*</span></label>
+                  <input
+                    className="form-input" type="number" min="0" max="30" step="1" placeholder="yrs"
+                    style={errStyle(editErrors.age_years)}
+                    value={editForm.age_years ?? ''}
+                    onChange={e => { setEditForm({ ...editForm, age_years: e.target.value }); setEditErrors({ ...editErrors, age_years: '' }); }}
+                  />
+                  <ErrMsg msg={editErrors.age_years} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Age (years)</label>
-                  <input className="form-input" type="number" min="0" value={editForm.age_years} onChange={e => setEditForm({ ...editForm, age_years: e.target.value })} />
+                  <label className="form-label" style={{ fontWeight: 700 }}>Weight</label>
+                  <input
+                    className="form-input" type="number" min="0" max="200" step="0.01" placeholder="e.g. 4.75"
+                    style={errStyle(editErrors.weight)}
+                    value={editForm.weight ?? ''}
+                    onChange={e => { setEditForm({ ...editForm, weight: e.target.value }); setEditErrors({ ...editErrors, weight: '' }); }}
+                  />
+                  <ErrMsg msg={editErrors.weight} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Gender</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Gender <span style={{ color: '#dc3545' }}>*</span></label>
                   <select className="form-select" value={editForm.gender} onChange={e => setEditForm({ ...editForm, gender: e.target.value })}>
                     <option>Male</option><option>Female</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Health + Status + Intake Date */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label">Health Status</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Health Status</label>
                   <select className="form-select" value={editForm.health_status} onChange={e => setEditForm({ ...editForm, health_status: e.target.value })}>
                     {['Excellent','Good','Fair','Poor'].map(h => <option key={h}>{h}</option>)}
                   </select>
                 </div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="form-label">Status</label>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Status</label>
                   <select className="form-select" value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}>
                     {['Available','Pending','Adopted','Not Available'].map(s => <option key={s}>{s}</option>)}
                   </select>
                 </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Intake Date</label>
+                  <input
+                    className="form-input" type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    style={errStyle(editErrors.intake_date)}
+                    value={editForm.intake_date || ''}
+                    onChange={e => { setEditForm({ ...editForm, intake_date: e.target.value }); setEditErrors({ ...editErrors, intake_date: '' }); }}
+                  />
+                  <ErrMsg msg={editErrors.intake_date} />
+                </div>
               </div>
+
+              {/* Additional Information */}
               <div className="form-group">
-                <label className="form-label">Description</label>
-                <textarea className="form-textarea" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
+                <label className="form-label" style={{ fontWeight: 700 }}>Additional Information</label>
+                <textarea
+                  className="form-textarea"
+                  placeholder="Tells us more about its information"
+                  maxLength={1000}
+                  style={{ background: '#f0fdf4', minHeight: 90, ...errStyle(editErrors.description) }}
+                  value={editForm.description || ''}
+                  onChange={e => { setEditForm({ ...editForm, description: e.target.value }); setEditErrors({ ...editErrors, description: '' }); }}
+                />
+                <ErrMsg msg={editErrors.description} />
               </div>
 
-              {/* Medical Records */}
+              {/* ─── MEDICAL RECORDS (identical logic to the Add form) ─── */}
               <div style={{ borderTop: '1.5px solid #e5e7eb', paddingTop: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: 'var(--text-dark)' }}>
-                  🏥 Medical Records <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-muted)' }}>(optional)</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-dark)' }}>🏥 Medical Records</span>
+                  <span className="badge badge-gray" style={{ fontSize: 11 }}>Optional</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+                  Leave everything blank if this {(editForm.type || '').toLowerCase()} hasn't been checked up yet.
                 </div>
 
-                {/* Neutered toggle + date */}
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', marginBottom: 8 }}>
-                    <input type="checkbox" checked={!!editForm.neutered} onChange={e => setEditForm({ ...editForm, neutered: e.target.checked, neutered_date: e.target.checked ? editForm.neutered_date : '' })} />
-                    <span style={{ fontWeight: 700 }}>✂️ Neutered / Spayed</span>
-                  </label>
-                  {editForm.neutered && (
-                    <div className="form-group" style={{ marginLeft: 24 }}>
-                      <label className="form-label">Date of Neutering / Spaying</label>
-                      <input className="form-input" type="date" value={editForm.neutered_date || ''} onChange={e => setEditForm({ ...editForm, neutered_date: e.target.value })} style={{ maxWidth: 220 }} />
-                    </div>
-                  )}
-                </div>
+                {/* Neuter — hidden for species that can't be neutered */}
+                {rulesFor(editForm.type).canNeuter ? (
+                  <div style={{ marginBottom: 14, padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={editForm.neutered === true}
+                        onChange={e => setEditForm({ ...editForm, neutered: e.target.checked, neutered_date: e.target.checked ? editForm.neutered_date : '' })}
+                      />
+                      <span style={{ fontWeight: 700 }}>✂️ Neutered / Spayed</span>
+                    </label>
+                    {editForm.neutered === true && (
+                      <div className="form-group" style={{ marginLeft: 24, marginTop: 10 }}>
+                        <label className="form-label">Date of Neutering / Spaying <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span></label>
+                        <input
+                          className="form-input" type="date"
+                          max={new Date().toISOString().slice(0, 10)}
+                          style={{ maxWidth: 220, ...errStyle(editErrors.neutered_date) }}
+                          value={editForm.neutered_date || ''}
+                          onChange={e => { setEditForm({ ...editForm, neutered_date: e.target.value }); setEditErrors({ ...editErrors, neutered_date: '' }); }}
+                        />
+                        <ErrMsg msg={editErrors.neutered_date} />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: 14, padding: '10px 12px', background: '#f1f5f9', borderRadius: 8, fontSize: 12.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>ℹ️</span>
+                    <span>Neutering / spaying is not tracked for <strong>{editForm.type}s</strong> — this section is hidden.</span>
+                  </div>
+                )}
 
-                {/* Vaccination toggle + log */}
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', marginBottom: 8 }}>
-                    <input type="checkbox" checked={!!editForm.vaccination_status} onChange={e => setEditForm({ ...editForm, vaccination_status: e.target.checked, vaccine_log: e.target.checked ? editForm.vaccine_log : [] })} />
+                {/* Vaccination — dropdown of species-specific vaccines */}
+                <div style={{ marginBottom: 14, padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={editForm.vaccination_status === true}
+                      onChange={e => setEditForm({
+                        ...editForm,
+                        vaccination_status: e.target.checked,
+                        vaccine_log: e.target.checked
+                          ? ((editForm.vaccine_log || []).length ? editForm.vaccine_log : [{ name: '', date: '' }])
+                          : [],
+                      })}
+                    />
                     <span style={{ fontWeight: 700 }}>💉 Vaccinated</span>
                   </label>
-                  {editForm.vaccination_status && (
-                    <div style={{ marginLeft: 24 }}>
-                      {(editForm.vaccine_log || []).map((v, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                          <input className="form-input" placeholder="Vaccine name (e.g. Rabies)" value={v.name} onChange={e => { const log = [...editForm.vaccine_log]; log[i] = { ...log[i], name: e.target.value }; setEditForm({ ...editForm, vaccine_log: log }); }} style={{ flex: 1 }} />
-                          <input className="form-input" type="date" value={v.date} onChange={e => { const log = [...editForm.vaccine_log]; log[i] = { ...log[i], date: e.target.value }; setEditForm({ ...editForm, vaccine_log: log }); }} style={{ width: 160 }} />
-                          <button type="button" onClick={() => setEditForm({ ...editForm, vaccine_log: editForm.vaccine_log.filter((_, idx) => idx !== i) })} style={{ background: 'none', border: 'none', color: '#dc3545', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
-                        </div>
-                      ))}
-                      <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 2 }} onClick={() => setEditForm({ ...editForm, vaccine_log: [...(editForm.vaccine_log || []), { name: '', date: '' }] })}>+ Add Vaccine</button>
+
+                  {editForm.vaccination_status === true && (
+                    <div style={{ marginLeft: 24, marginTop: 10 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                        Vaccines available for <strong>{editForm.type}s</strong>:
+                      </div>
+
+                      {(editForm.vaccine_log || []).map((v, i) => {
+                        const taken = (editForm.vaccine_log || []).filter((_, idx) => idx !== i).map(x => x.name);
+                        // An old saved vaccine might not be in the new species list — keep it selectable.
+                        const options = rulesFor(editForm.type).vaccines.includes(v.name) || !v.name
+                          ? rulesFor(editForm.type).vaccines
+                          : [...rulesFor(editForm.type).vaccines, v.name];
+                        return (
+                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                            <select
+                              className="form-select"
+                              value={v.name || ''}
+                              onChange={e => {
+                                const log = [...editForm.vaccine_log];
+                                log[i] = { ...log[i], name: e.target.value };
+                                setEditForm({ ...editForm, vaccine_log: log });
+                                setEditErrors({ ...editErrors, vaccine_log: '' });
+                              }}
+                              style={{ flex: 1, fontSize: 13 }}
+                            >
+                              <option value="">— Select a vaccine —</option>
+                              {options.map(name => (
+                                <option key={name} value={name} disabled={taken.includes(name)}>
+                                  {name}{taken.includes(name) ? ' (already added)' : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              className="form-input" type="date"
+                              max={new Date().toISOString().slice(0, 10)}
+                              value={v.date || ''}
+                              onChange={e => {
+                                const log = [...editForm.vaccine_log];
+                                log[i] = { ...log[i], date: e.target.value };
+                                setEditForm({ ...editForm, vaccine_log: log });
+                                setEditErrors({ ...editErrors, vaccine_log: '' });
+                              }}
+                              style={{ width: 155, fontSize: 13 }}
+                            />
+                            <button
+                              type="button"
+                              title="Remove this vaccine"
+                              onClick={() => setEditForm({ ...editForm, vaccine_log: editForm.vaccine_log.filter((_, idx) => idx !== i) })}
+                              style={{ background: 'none', border: 'none', color: '#dc3545', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}
+                            >×</button>
+                          </div>
+                        );
+                      })}
+
+                      <ErrMsg msg={editErrors.vaccine_log} />
+
+                      {(editForm.vaccine_log || []).length < rulesFor(editForm.type).vaccines.length && (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          style={{ marginTop: 4 }}
+                          onClick={() => setEditForm({ ...editForm, vaccine_log: [...(editForm.vaccine_log || []), { name: '', date: '' }] })}
+                        >+ Add Vaccine</button>
+                      )}
                     </div>
                   )}
                 </div>
 
+                {/* Checkup / vet — kept for every species */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div className="form-group">
-                    <label className="form-label">Veterinary Name</label>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Veterinary Name</label>
                     <input className="form-input" placeholder="e.g. Dr. Juan dela Cruz" value={editForm.vet_name || ''} onChange={e => setEditForm({ ...editForm, vet_name: e.target.value })} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Clinic Name</label>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Clinic Name</label>
                     <input className="form-input" placeholder="e.g. PetCare Animal Clinic" value={editForm.clinic_name || ''} onChange={e => setEditForm({ ...editForm, clinic_name: e.target.value })} />
                   </div>
                 </div>
                 <div className="form-group" style={{ marginTop: 4 }}>
-                  <label className="form-label">Last Checkup Date</label>
-                  <input className="form-input" type="date" value={editForm.last_checkup_date || ''} onChange={e => setEditForm({ ...editForm, last_checkup_date: e.target.value || '' })} />
+                  <label className="form-label" style={{ fontWeight: 700 }}>Last Checkup Date</label>
+                  <input
+                    className="form-input" type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    style={errStyle(editErrors.last_checkup_date)}
+                    value={editForm.last_checkup_date || ''}
+                    onChange={e => { setEditForm({ ...editForm, last_checkup_date: e.target.value }); setEditErrors({ ...editErrors, last_checkup_date: '' }); }}
+                  />
+                  <ErrMsg msg={editErrors.last_checkup_date} />
                 </div>
                 <div className="form-group" style={{ marginTop: 4 }}>
-                  <label className="form-label">Medical Notes / Conditions</label>
-                  <textarea className="form-textarea" placeholder="e.g. No known conditions" value={editForm.medical_notes || ''} onChange={e => setEditForm({ ...editForm, medical_notes: e.target.value })} style={{ minHeight: 70 }} />
+                  <label className="form-label" style={{ fontWeight: 700 }}>Medical Notes / Conditions</label>
+                  <textarea
+                    className="form-textarea"
+                    placeholder="e.g. No known conditions, previously treated for mange"
+                    maxLength={500}
+                    style={{ minHeight: 70, ...errStyle(editErrors.medical_notes) }}
+                    value={editForm.medical_notes || ''}
+                    onChange={e => { setEditForm({ ...editForm, medical_notes: e.target.value }); setEditErrors({ ...editErrors, medical_notes: '' }); }}
+                  />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', marginTop: 2 }}>
+                    {(editForm.medical_notes || '').length}/500
+                  </div>
+                  <ErrMsg msg={editErrors.medical_notes} />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" onClick={() => { setEditPet(null); setEditPhotoFile(null); setEditPhotoPreview(null); }}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Changes</button>
+              <div style={{
+                display: 'flex', gap: 10, justifyContent: 'flex-end',
+                borderTop: '1.5px solid #e5e7eb', paddingTop: 16, marginTop: 4,
+              }}>
+                <button type="button" className="btn btn-outline" onClick={() => { setEditPet(null); setEditErrors({}); setEditPhotoFile(null); setEditPhotoPreview(null); }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ minWidth: 150 }}>
+                  💾 Save Changes
+                </button>
               </div>
             </form>
           </div>

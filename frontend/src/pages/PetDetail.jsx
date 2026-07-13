@@ -115,15 +115,17 @@ export default function PetDetail() {
                 </div>
               ) : (
                 <>
-                  {/* Neutered */}
-                  <div style={styles.medRow}>
-                    <span style={styles.medLabel}>Neutered / Spayed</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      {pet.neutered
-                        ? <><span className="badge badge-blue">✂️ Yes</span>{pet.neutered_date && <span style={styles.medDate}>{new Date(pet.neutered_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}</>
-                        : <span className="badge badge-gray">Not Neutered</span>}
-                    </span>
-                  </div>
+                  {/* Neutered — only for species where this makes sense. Birds are skipped. */}
+                  {['Dog', 'Cat', 'Rabbit'].includes(pet.type) && (
+                    <div style={styles.medRow}>
+                      <span style={styles.medLabel}>Neutered / Spayed</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {pet.neutered
+                          ? <><span className="badge badge-blue">✂️ Yes</span>{pet.neutered_date && <span style={styles.medDate}>{new Date(pet.neutered_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}</>
+                          : <span className="badge badge-gray">Not Neutered</span>}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Vaccinated */}
                   <div style={styles.medRow}>

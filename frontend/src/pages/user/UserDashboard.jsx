@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
-import { API, useAuth } from '../../context/AuthContext';
+import { API, useAuth, avatarUrl } from '../../context/AuthContext';
 import { ConfirmModal } from '../../components/ConfirmDialog';
 
 const PET_TYPES = ['All', 'Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
@@ -229,7 +229,7 @@ export default function UserDashboard() {
         {/* Welcome */}
         <div style={styles.welcomeCard}>
           <div style={styles.welcomeLeft}>
-            <div style={styles.welcomeAvatar}>{user?.first_name?.[0]}{user?.last_name?.[0]}</div>
+            <img src={avatarUrl(user)} alt={user?.first_name} style={styles.welcomeAvatar} />
             <div>
               <h1 style={styles.welcomeTitle}>Welcome back, {user?.first_name}! 🐾</h1>
               <p style={styles.welcomeSub}>Manage your adoption applications and track their status.</p>
@@ -520,7 +520,7 @@ export default function UserDashboard() {
 const styles = {
   welcomeCard: { background: 'white', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, boxShadow: 'var(--shadow-sm)' },
   welcomeLeft: { display: 'flex', alignItems: 'center', gap: 16 },
-  welcomeAvatar: { width: 52, height: 52, background: 'var(--primary)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 },
+  welcomeAvatar: { width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)' },
   welcomeTitle: { fontFamily: "'Fraunces',serif", fontSize: 22, fontWeight: 700, marginBottom: 4 },
   welcomeSub: { color: 'var(--text-muted)', fontSize: 14 },
   statsRow: { display: 'flex', gap: 16 },

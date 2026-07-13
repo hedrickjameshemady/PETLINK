@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { API, useAuth } from '../context/AuthContext';
+import { API, useAuth, avatarUrl } from '../context/AuthContext';
 import { useState, useEffect } from 'react';
 
 import logo from '../assets/image 16.png';
@@ -104,9 +104,7 @@ export default function Navbar() {
               )}
             </div>
             <button onClick={() => { setMenuOpen(!menuOpen); setNotifOpen(false); }} style={styles.userBtn}>
-              <span style={styles.userAvatar}>
-                {user.first_name?.[0]}{user.last_name?.[0]}
-              </span>
+              <img src={avatarUrl(user)} alt={user.first_name} style={styles.userAvatar} />
               <span>{user.first_name}</span>
               <span style={{ fontSize: 12 }}>▾</span>
             </button>
@@ -265,14 +263,10 @@ loginBtn: {
   userAvatar: {
     width: 28,
     height: 28,
-    background: 'var(--primary)',
-    color: 'white',
     borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 11,
-    fontWeight: 700,
+    objectFit: 'cover',
+    flexShrink: 0,
+    border: '1.5px solid var(--border)',
   },
   dropdown: {
     position: 'absolute',

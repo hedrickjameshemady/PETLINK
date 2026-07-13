@@ -111,18 +111,46 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // Create pet (admin/staff)
 router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes } = req.body;
+    const { name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, vaccine_log, neutered_date } = req.body;
     const photoUrl = req.file ? `/uploads/pets/${req.file.filename}` : null;
+
+    // FormData turns everything into TEXT. The string "false" is TRUTHY in JS!
+    // So we must compare against the actual word "true".
+    const toBool = (v) => (v === true || v === 'true' || v === 1 || v === '1') ? 1 : 0;
+    // Turn empty strings / "null" / "undefined" into a real SQL NULL
+    const nullify = (v) => (v === '' || v === undefined || v === null || v === 'null' || v === 'undefined') ? null : v;
+    // Numbers: blank should be NULL, not 0
+    const num = (v) => (v === '' || v === undefined || v === null || v === 'null') ? null : Number(v);
+    // An empty vaccine list should be NULL, not the text "[]"
+    const cleanLog = (v) => (!v || v === '[]' || v === 'null') ? null : v;
+
+    const isVaccinated = toBool(vaccination_status);
+    const isNeutered = toBool(neutered);
 
     const [[maxRow]] = await db.query("SELECT MAX(CAST(SUBSTRING(pet_id, 4) AS UNSIGNED)) as maxNum FROM pets");
     const nextId = (maxRow.maxNum || 0) + 1;
     const petId = `PET${String(nextId).padStart(3, '0')}`;
 
-    const { vaccine_log, neutered_date } = req.body;
     const [result] = await db.query(
       `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by, photo, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, neutered_date, vaccine_log)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [petId, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status ? 1 : 0, neutered ? 1 : 0, microchipped, status || 'Available', description, intake_date, req.user.id, photoUrl, vet_name || null, clinic_name || null, last_checkup_date || null, vaccines_given || null, medical_notes || null, neutered_date || null, vaccine_log || null]
+      [
+        petId, name, type, nullify(breed),
+        num(age_years), num(age_months),
+        gender, nullify(color), num(weight),
+        health_status || 'Good',
+        isVaccinated,
+        isNeutered,
+        toBool(microchipped),
+        status || 'Available',
+        nullify(description),
+        nullify(intake_date),
+        req.user.id, photoUrl,
+        nullify(vet_name), nullify(clinic_name), nullify(last_checkup_date),
+        nullify(vaccines_given), nullify(medical_notes),
+        isNeutered ? nullify(neutered_date) : null,      // no date if not neutered
+        isVaccinated ? cleanLog(vaccine_log) : null,     // no log if not vaccinated
+      ]
     );
     res.status(201).json({ id: result.insertId, pet_id: petId, message: 'Pet added successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -131,18 +159,27 @@ router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async 
 // Update pet
 router.put('/:id', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { name, type, breed, age_years, gender, health_status, status, description, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, vaccination_status, neutered, neutered_date, vaccine_log } = req.body;
-    const nullify = (v) => (v === '' || v === undefined || v === 'null') ? null : v;
+    const { name, type, breed, age_years, gender, weight, color, intake_date, health_status, status, description, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, vaccination_status, neutered, neutered_date, vaccine_log } = req.body;
+    const nullify = (v) => (v === '' || v === undefined || v === null || v === 'null' || v === 'undefined') ? null : v;
+    const toBool = (v) => (v === true || v === 'true' || v === 1 || v === '1') ? 1 : 0;
+    const num = (v) => (v === '' || v === undefined || v === null || v === 'null') ? null : Number(v);
+    const cleanLog = (v) => (!v || v === '[]' || v === 'null') ? null : v;
+
+    const isVaccinated = toBool(vaccination_status);
+    const isNeutered = toBool(neutered);
+
     const fields = [
-      name, type, breed, age_years, gender, health_status, status, description,
+      name, type, nullify(breed), num(age_years), gender,
+      num(weight), nullify(color), nullify(intake_date),
+      health_status, status, nullify(description),
       nullify(vet_name), nullify(clinic_name), nullify(last_checkup_date),
       nullify(vaccines_given), nullify(medical_notes),
-      (vaccination_status === 'true' || vaccination_status === true) ? 1 : 0,
-      (neutered === 'true' || neutered === true) ? 1 : 0,
-      nullify(neutered_date),
-      nullify(vaccine_log),
+      isVaccinated,
+      isNeutered,
+      isNeutered ? nullify(neutered_date) : null,
+      isVaccinated ? cleanLog(vaccine_log) : null,
     ];
-    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, health_status=?, status=?, description=?, vet_name=?, clinic_name=?, last_checkup_date=?, vaccines_given=?, medical_notes=?, vaccination_status=?, neutered=?, neutered_date=?, vaccine_log=?';
+    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, weight=?, color=?, intake_date=?, health_status=?, status=?, description=?, vet_name=?, clinic_name=?, last_checkup_date=?, vaccines_given=?, medical_notes=?, vaccination_status=?, neutered=?, neutered_date=?, vaccine_log=?';
     if (req.file) {
       query += ', photo=?';
       fields.push(`/uploads/pets/${req.file.filename}`);

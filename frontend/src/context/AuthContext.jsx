@@ -19,7 +19,25 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('petlink_token');
     const saved = localStorage.getItem('petlink_user');
     if (token && saved) {
-      setUser(JSON.parse(saved));
+      setUser(JSON.parse(saved)); // show something instantly
+
+      // Then quietly re-fetch from the server so profile_photo is always up to date
+      API.get('/auth/me')
+        .then(({ data }) => {
+          const fresh = {
+            id: data.id,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            email: data.email,
+            role: data.role,
+            profile_photo: data.profile_photo,
+          };
+          localStorage.setItem('petlink_user', JSON.stringify(fresh));
+          setUser(fresh);
+        })
+        .catch(() => { /* offline or bad token — keep the cached copy */ })
+        .finally(() => setLoading(false));
+      return;
     }
     setLoading(false);
   }, []);
@@ -64,3 +82,12 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => useContext(AuthContext);
 export { API };
+
+// One single place that decides what image to show for a person.
+// If they uploaded a photo → use it. If not → auto-generate a nice initials circle.
+export function avatarUrl(person) {
+  if (!person) return '';
+  if (person.profile_photo) return `http://localhost:5000${person.profile_photo}`;
+  const name = `${person.first_name || ''} ${person.last_name || ''}`.trim() || person.name || '?';
+  return 'https://ui-avatars.com/api/?name=' + encodeURIComponent(name) + '&background=e5e7eb&color=374151&size=200';
+}

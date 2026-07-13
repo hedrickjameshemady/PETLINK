@@ -35,7 +35,7 @@ router.post('/register', async (req, res) => {
       process.env.JWT_SECRET || 'petlink_secret',
       { expiresIn: '7d' }
     );
-    res.status(201).json({ token, user: { id: result.insertId, first_name, last_name, email, role: 'user' } });
+    res.status(201).json({ token, user: { id: result.insertId, first_name, last_name, email, role: 'user', profile_photo: null } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

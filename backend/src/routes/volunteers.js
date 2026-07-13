@@ -308,10 +308,15 @@ router.get('/donations/my', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Get all donations
+// Get all donations (JOIN users so we get the donor's CURRENT profile photo, not a stale snapshot)
 router.get('/donations', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM donations ORDER BY donated_at DESC');
+    const [rows] = await db.query(`
+      SELECT d.*, u.profile_photo AS donor_photo
+      FROM donations d
+      LEFT JOIN users u ON d.donor_id = u.id
+      ORDER BY d.donated_at DESC
+    `);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

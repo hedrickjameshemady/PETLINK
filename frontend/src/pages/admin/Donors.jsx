@@ -120,10 +120,19 @@ export default function Donors() {
     ? `${d.item_category || 'Item'}${d.item_quantity ? ` (${d.item_quantity})` : ''} · ${d.handoff_method || '—'}`
     : `₱${Number(d.amount ?? 0).toLocaleString()}${d.payment_method ? ` · ${d.payment_method}` : ''}`;
 
-  const avatarCircle = (name, bg = '#fff3e0') => (
-    <div style={{ width: 36, height: 36, background: bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)', flexShrink: 0 }}>
-      {(name || '?')[0].toUpperCase()}
-    </div>
+  // Show the donor's real uploaded photo if we have one; otherwise fall back to a letter circle.
+  const avatarCircle = (name, bg = '#fff3e0', photo = null) => (
+    photo ? (
+      <img
+        src={`http://localhost:5000${photo}`}
+        alt={name || 'Donor'}
+        style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1.5px solid var(--border)' }}
+      />
+    ) : (
+      <div style={{ width: 36, height: 36, background: bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)', flexShrink: 0 }}>
+        {(name || '?')[0].toUpperCase()}
+      </div>
+    )
   );
 
   /* ─── STAT CARD ─── */
@@ -247,7 +256,7 @@ export default function Donors() {
                 <tr key={d.id ?? i}>
                   <td>
                     <div style={s.nameCell}>
-                      {avatarCircle(d.donor_name, isNonMon(d) ? '#fff7ed' : '#f0fdf4')}
+                      {avatarCircle(d.donor_name, isNonMon(d) ? '#fff7ed' : '#f0fdf4', d.donor_photo)}
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{d.donor_name || 'Anonymous'}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.donor_email}</div>
