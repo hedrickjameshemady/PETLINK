@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { path: '/admin/volunteers', label: 'Volunteer Records', icon: '🤝' },
   { path: '/admin/donors', label: 'Donors', icon: '💝' },
   { path: '/admin/community', label: 'Community Engagement', icon: '📢' },
+  { path: '/admin/messages', label: 'Messages', icon: '💬' },
 ];
 
 const QUICK_ACTIONS = [
@@ -27,6 +28,17 @@ export default function AdminLayout() {
     API.get('/dashboard-stats')
       .then(({ data }) => setPendingCount(data.applications?.pending || 0))
       .catch(() => {});
+  }, []);
+
+  // Live count of unread user messages — asks the server every 10 seconds.
+  const [msgUnread, setMsgUnread] = useState(0);
+  useEffect(() => {
+    const tick = () => API.get('/messages/threads/meta/unread')
+      .then(({ data }) => setMsgUnread(data.unread))
+      .catch(() => {});
+    tick();                                 // run once right away
+    const t = setInterval(tick, 10000);     // then every 10s
+    return () => clearInterval(t);          // stop the timer when leaving the page
   }, []);
 
   const isActive = (path) => path === '/admin'

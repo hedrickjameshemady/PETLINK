@@ -5,8 +5,9 @@ import { ConfirmModal } from '../../components/ConfirmDialog';
 import volunteeringIcon from '../../assets/volunteering 2.png';
 import animalCareIcon from '../../assets/animal-care 1.png';
 
-const TIME_SLOTS = ['Morning (8AM-12PM)', 'Afternoon (12PM-5PM)', 'Evening (5PM-9PM)', 'Whole Day (8AM-9PM)'];
-const DUTIES = ['Pet Care', 'Feeding', 'Cleaning', 'Dog Walking', 'Adoption Helper', 'Admin Support', 'Fundraising', 'Event Support'];
+// Both lists now come from ONE file — so the apply form and this page can never disagree.
+import { VOLUNTEER_ROLES, TIME_SLOTS } from '../../constants/roles';
+const DUTIES = VOLUNTEER_ROLES;
 const SCHED_COLORS = { Scheduled: '#e3f2fd', Completed: '#e8f5e9', Missed: '#fff3e0', Cancelled: '#fdecea' };
 
 const APPROVAL_CRITERIA = [

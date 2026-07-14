@@ -23,6 +23,8 @@ import AdminLostAndFound from './pages/admin/AdminLostAndFound';
 
 import UserDashboard from './pages/user/UserDashboard';
 import Profile from './pages/Profile';
+import ChatWidget from './components/ChatWidget';
+import AdminMessages from './pages/admin/AdminMessages';
 
 function GuestOnly({ children }) {
   const { user, loading } = useAuth();
@@ -94,10 +96,14 @@ export default function App() {
             <Route path="donors" element={<Donors />} />
             <Route path="community" element={<CommunityAndCampaigns />} />
             <Route path="lost-and-found" element={<AdminLostAndFound />} />
+            <Route path="messages" element={<AdminMessages />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+
+        {/* The floating chat bubble. It hides itself for admins and logged-out visitors. */}
+        <ChatWidget />
       </BrowserRouter>
     </AuthProvider>
   );

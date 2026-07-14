@@ -5,9 +5,7 @@ import { API, useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { SuccessModal } from '../components/ConfirmDialog';
 
-const AVAILABILITY = ['Weekdays', 'Weekends', 'Both', 'Flexible'];
-const TIME_SLOTS = ['Morning (8AM-12PM)', 'Afternoon (12PM-5PM)', 'Evening (5PM-9PM)', 'Whole Day (8AM-9PM)'];
-const ROLES = ['Pet Care', 'Adoption Helper', 'Cleaning', 'Admin Support', 'Fundraising', 'Other'];
+import { VOLUNTEER_ROLES, ROLE_DESCRIPTIONS, AVAILABILITY, TIME_SLOTS } from '../constants/roles';
 
 export default function Volunteer() {
   const { user } = useAuth();
@@ -175,14 +173,48 @@ export default function Volunteer() {
             </Field>
 
             <Field label="Preferred Role" required error={errors.preferred_role}>
-              <select
-                style={inputStyle('preferred_role')}
-                value={form.preferred_role}
-                onChange={e => setField('preferred_role', e.target.value)}
-              >
-                <option value="">Select Preferred Role</option>
-                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+              {/* These are the EXACT same roles the admin can assign as duties. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 10, marginTop: 4 }}>
+                {VOLUNTEER_ROLES.map(r => {
+                  const picked = form.preferred_role === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setField('preferred_role', r)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        cursor: 'pointer',
+                        border: picked ? '2px solid var(--primary)' : '1.5px solid var(--border)',
+                        background: picked ? 'var(--green-50)' : '#fff',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        fontWeight: 700, fontSize: 13.5,
+                        color: picked ? 'var(--primary-dark)' : 'var(--text-dark)',
+                        marginBottom: 4,
+                      }}>
+                        <span style={{
+                          width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                          border: picked ? '5px solid var(--primary)' : '2px solid #cbd5e1',
+                          background: '#fff',
+                        }} />
+                        {r}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.4, paddingLeft: 24 }}>
+                        {ROLE_DESCRIPTIONS[r]}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <span style={styles.hint}>
+                Pick the role that fits you best. The shelter may still assign you other duties as needed.
+              </span>
             </Field>
 
             <Field label="Why do you want to volunteer?" required error={errors.motivation}>

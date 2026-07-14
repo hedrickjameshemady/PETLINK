@@ -386,6 +386,22 @@ export default function CommunityAndCampaigns() {
     setPosting(false);
   };
 
+  const deleteAnnouncement = (a) => {
+    setConfirmState({
+      title: 'Delete this announcement?',
+      message: `"${a.headline}" will be permanently removed from the Community page. This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await API.delete(`/announcements/${a.id}`);
+          setAnnouncements(prev => prev.filter(x => x.id !== a.id));
+          showToast('Announcement deleted.');
+        } catch (err) {
+          showToast(err?.response?.data?.error || 'Failed to delete announcement.');
+        }
+      },
+    });
+  };
+
   const togglePin = async (a) => {
     const next = !a.is_pinned;
     setAnnouncements(prev =>
@@ -603,6 +619,14 @@ export default function CommunityAndCampaigns() {
                     </button>
                     <button className="cc-share-btn" onClick={() => shareToFacebook(a)}><ShareIcon /> Facebook</button>
                     <button className="cc-share-btn" onClick={() => shareToInstagram(a)}><ShareIcon /> Instagram</button>
+                    <button
+                      className="cc-share-btn"
+                      style={{ color: '#dc3545' }}
+                      title="Delete this announcement"
+                      onClick={() => deleteAnnouncement(a)}
+                    >
+                      🗑 Delete
+                    </button>
                   </div>
                 </div>
                 {a.message && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>{a.message}</p>}

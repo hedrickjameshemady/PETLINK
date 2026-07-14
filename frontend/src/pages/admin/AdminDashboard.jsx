@@ -65,7 +65,8 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [stats,  setStats]  = useState(null);
   const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(true);
+ const [loading, setLoading] = useState(true);
+  const [appTab, setAppTab] = useState('Adoption'); // which pile we're looking at
 
   useEffect(() => {
     Promise.all([
@@ -83,6 +84,11 @@ export default function AdminDashboard() {
   const d  = detail || {};
   const pets   = d.recentPets          || [];
   const apps   = d.pendingApplications || [];
+
+  // The backend already tags each application with app_type ('Adoption' or 'Volunteer').
+  // We just split the one big pile into two clean piles.
+  const adoptionApps  = apps.filter(a => a.app_type === 'Adoption');
+  const volunteerApps = apps.filter(a => a.app_type === 'Volunteer');
   const events = d.upcomingEvents      || [];
   const vols   = d.volunteers          || { total: 0, newSignups: [] };
   const dons   = d.donations           || { thisWeek: 0, prevWeek: 0, topDonors: [] };
@@ -186,36 +192,96 @@ const weekPct = dons.prevWeek > 0
           </div>
         </div>
 
-        {/* Pending Applications */}
+        {/* Pending Applications — now split into Adoption vs Volunteer */}
         <div style={css.card}>
           <div style={css.cardHeader}>
             <span style={css.cardTitle}>Pending Applications</span>
-            <Link to="/admin/pets" style={css.viewAll}>Review all applications</Link>
+            <Link
+              to={appTab === 'Adoption' ? '/admin/pets' : '/admin/volunteers'}
+              style={css.viewAll}
+            >
+              Review all {appTab.toLowerCase()}s
+            </Link>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {apps.length === 0 && <div style={css.empty}>No pending applications.</div>}
-            {apps.map(app => (
-              <div key={`${app.app_type}-${app.id}`} style={css.petRow}>
-                <div style={css.appAvatar}>
-                  {app.applicant_photo
-                    ? <img src={petPhotoUrl(app.applicant_photo)} alt={app.applicant_name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-                    : <span style={{ fontSize: 18, color: '#aaa' }}>👤</span>
-                  }
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={css.petName}>{app.applicant_name}</div>
-                  <div style={css.petSub}>{app.app_type}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ ...css.badge, background: '#fef3c7', color: '#92400e' }}>
-                    For Review
-                  </span>
-                  <div style={css.timeAgo}>{submittedAgo(app.applied_at)}</div>
-                </div>
+
+          {/* ── TABS ── */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, borderBottom: '1.5px solid var(--border)' }}>
+            {[
+              { key: 'Adoption',  icon: '🐾', list: adoptionApps },
+              { key: 'Volunteer', icon: '🤝', list: volunteerApps },
+            ].map(t => {
+              const active = appTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setAppTab(t.key)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: '8px 12px', fontSize: 13,
+                    fontWeight: active ? 700 : 500,
+                    color: active ? 'var(--primary)' : 'var(--text-muted)',
+                    borderBottom: active ? '2.5px solid var(--primary)' : '2.5px solid transparent',
+                    marginBottom: -1.5,
+                  }}
+                >
+                  <span>{t.icon}</span>
+                  <span>{t.key}</span>
+                  {t.list.length > 0 && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, minWidth: 18, textAlign: 'center',
+                      padding: '1px 6px', borderRadius: 10,
+                      background: active ? 'var(--primary)' : '#e5e7eb',
+                      color: active ? '#fff' : '#64748b',
+                    }}>{t.list.length}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── LIST FOR THE ACTIVE TAB ── */}
+          {(() => {
+            const shown = appTab === 'Adoption' ? adoptionApps : volunteerApps;
+            if (shown.length === 0) {
+              return <div style={css.empty}>No pending {appTab.toLowerCase()} applications.</div>;
+            }
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {shown.map(app => (
+                  <div key={`${app.app_type}-${app.id}`} style={css.petRow}>
+                    <div style={css.appAvatar}>
+                      {app.applicant_photo
+                        ? <img src={petPhotoUrl(app.applicant_photo)} alt={app.applicant_name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                        : <span style={{ fontSize: 18, color: '#aaa' }}>👤</span>
+                      }
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={css.petName}>{app.applicant_name}</div>
+                      <div style={css.petSub}>
+                        {/* Show the useful detail, not just the word "Adoption" again */}
+                        {app.app_type === 'Adoption'
+                          ? (app.pet_name ? `Wants to adopt ${app.pet_name}` : 'Adoption application')
+                          : (app.preferred_role ? `Applying as ${app.preferred_role}` : 'Volunteer application')}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <span style={{
+                        ...css.badge,
+                        background: app.app_type === 'Adoption' ? '#fef3c7' : '#dbeafe',
+                        color:      app.app_type === 'Adoption' ? '#92400e' : '#1e40af',
+                      }}>
+                        For Review
+                      </span>
+                      <div style={css.timeAgo}>{submittedAgo(app.applied_at)}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </div>
 
       </div>

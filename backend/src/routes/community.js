@@ -208,6 +208,28 @@ router.patch('/announcements/:id/pin', authMiddleware, adminMiddleware, async (r
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Delete an announcement (admin) — also removes its uploaded photo/video from the disk
+router.delete('/announcements/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    // First find it, so we know which files to clean up
+    const [rows] = await db.query('SELECT photo, video FROM announcements WHERE id = ?', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Announcement not found' });
+
+    await db.query('DELETE FROM announcements WHERE id = ?', [req.params.id]);
+
+    // Delete the leftover media files so the uploads folder doesn't fill up with junk.
+    // If a file is already missing, we just ignore it — no need to crash over it.
+    ['photo', 'video'].forEach(key => {
+      const url = rows[0][key];
+      if (!url) return;
+      const filePath = path.join(__dirname, '..', url); // "/uploads/announcements/x.png" -> real path
+      fs.unlink(filePath, () => { /* already gone — fine */ });
+    });
+
+    res.json({ message: 'Announcement deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── Dashboard stats ──────────────────────────────────────────────────────────
 router.get('/dashboard-stats', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -297,27 +319,43 @@ router.get('/dashboard-detail', authMiddleware, adminMiddleware, async (req, res
        FROM pets ORDER BY created_at DESC LIMIT 4`
     );
 
+    // Adoption applications waiting for review.
+    // app_type is now exactly 'Adoption' — the dashboard filters on this word.
+    // We also grab p.name AS pet_name so the card can say "Wants to adopt Bantay".
     const [pendingAdoptions] = await db.query(
-      `SELECT aa.id, aa.applied_at, aa.status, 'Adoption Application' AS app_type,
+      `SELECT aa.id, aa.applied_at, aa.status, 'Adoption' AS app_type,
               CONCAT(u.first_name, ' ', u.last_name) AS applicant_name,
-              u.profile_photo AS applicant_photo
+              u.profile_photo AS applicant_photo,
+              p.name AS pet_name,
+              NULL AS preferred_role
        FROM adoption_applications aa
        JOIN users u ON aa.applicant_id = u.id
+       LEFT JOIN pets p ON aa.pet_id = p.id
        WHERE aa.status = 'Pending Review'
-       ORDER BY aa.applied_at DESC LIMIT 3`
+       ORDER BY aa.applied_at DESC LIMIT 5`
     );
+
+    // Volunteer applications waiting for review.
+    // app_type is exactly 'Volunteer'. We grab preferred_role so the card
+    // can say "Applying as Dog Walking".
     const [pendingVolunteers] = await db.query(
-      `SELECT va.id, va.applied_at, va.status, 'Volunteer Application' AS app_type,
+      `SELECT va.id, va.applied_at, va.status, 'Volunteer' AS app_type,
               CONCAT(u.first_name, ' ', u.last_name) AS applicant_name,
-              u.profile_photo AS applicant_photo
+              u.profile_photo AS applicant_photo,
+              NULL AS pet_name,
+              va.preferred_role
        FROM volunteer_applications va
        JOIN users u ON va.user_id = u.id
        WHERE va.status = 'Pending'
-       ORDER BY va.applied_at DESC LIMIT 3`
+       ORDER BY va.applied_at DESC LIMIT 5`
     );
+
+    // Glue the two lists into one array and hand it to the frontend.
+    // NO .slice() anymore — the frontend splits them into two tabs, so if we
+    // cut the combined list to 3 here, one tab could wrongly show as empty.
+    // Each query already has its own LIMIT 5, so we send at most 10 rows total.
     const pendingApplications = [...pendingAdoptions, ...pendingVolunteers]
-      .sort((a, b) => new Date(b.applied_at) - new Date(a.applied_at))
-      .slice(0, 3);
+      .sort((a, b) => new Date(b.applied_at) - new Date(a.applied_at));
 
     const [upcomingEvents] = await db.query(
       `SELECT id, title, type, start_date, location, status

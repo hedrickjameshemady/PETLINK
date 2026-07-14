@@ -19,6 +19,7 @@ app.use('/api/adoptions', require('./routes/adoptions'));
 app.use('/api/volunteers', require('./routes/volunteers'));
 app.use('/api', require('./routes/community'));
 app.use('/api/lostfound', require('./routes/lostfound'));
+app.use('/api/messages', require('./routes/messages'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', message: 'PETLINK API running' }));
