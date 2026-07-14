@@ -5,7 +5,7 @@ import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
 import { SuccessModal } from '../components/ConfirmDialog';
 
-const API_BASE = 'http://localhost:5000';
+import { API_BASE } from '../config';
 
 export default function Community() {
   const [campaigns, setCampaigns] = useState([]);

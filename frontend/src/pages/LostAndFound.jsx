@@ -8,7 +8,7 @@ import corgiImg  from '../assets/Group 88.png';
 import catImg    from '../assets/Rectangle 390.png';
 import greenRect from '../assets/Rectangle 477.png';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { API_BASE } from '../config';
 
 const PET_TYPES     = ['All', 'Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
 const PET_TYPE_ICON = { All: '✨', Dog: '🐶', Cat: '🐱', Bird: '🐦', Rabbit: '🐰', Others: '🐾' };

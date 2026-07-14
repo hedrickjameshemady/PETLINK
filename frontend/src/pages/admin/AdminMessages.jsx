@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { API } from '../../context/AuthContext';
+import { fileUrl } from "../../config";
 
 export default function AdminMessages() {
   const [threads, setThreads] = useState([]);
@@ -63,7 +64,7 @@ export default function AdminMessages() {
   });
 
   const photo = (p, name) => p
-    ? `http://localhost:5000${p}`
+    ? fileUrl(p)
     : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(name) + '&background=e5e7eb&color=374151&size=80';
 
   const totalUnread = threads.reduce((n, t) => n + Number(t.unread || 0), 0);

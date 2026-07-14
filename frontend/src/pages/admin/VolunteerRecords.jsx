@@ -4,6 +4,7 @@ import { ConfirmModal } from '../../components/ConfirmDialog';
 
 import volunteeringIcon from '../../assets/volunteering 2.png';
 import animalCareIcon from '../../assets/animal-care 1.png';
+import { fileUrl } from '../../config';
 
 // Both lists now come from ONE file — so the apply form and this page can never disagree.
 import { VOLUNTEER_ROLES, TIME_SLOTS } from '../../constants/roles';
@@ -279,7 +280,7 @@ export default function VolunteerRecords() {
   const avatarCircle = (name, bg = 'var(--green-200)', photo = null) => (
     photo ? (
       <img
-        src={`http://localhost:5000${photo}`}
+        src={fileUrl(photo)}
         alt={name || ''}
         style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1.5px solid var(--border)' }}
       />

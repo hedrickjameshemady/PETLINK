@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, useAuth } from '../context/AuthContext';
+import { fileUrl } from '../config';
 
 export default function Profile() {
   const { user, updateUser, logout } = useAuth();
@@ -67,7 +68,7 @@ export default function Profile() {
   if (!form) return <div className="loading-spinner"><div className="spinner" /></div>;
 
   const avatar = form.profile_photo
-    ? `http://localhost:5000${form.profile_photo}`
+    ? fileUrl(form.profile_photo)
     : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(`${form.first_name} ${form.last_name}`) + '&background=e5e7eb&color=374151&size=200';
 
   return (

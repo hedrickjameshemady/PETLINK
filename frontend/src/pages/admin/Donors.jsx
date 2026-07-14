@@ -5,6 +5,8 @@ import fundRaisingIcon from '../../assets/fund-raising 1.png';
 import bloodDonationIcon from '../../assets/blood-donation 1.png';
 import animalCareIcon from '../../assets/animal-care 1.png';
 
+import { fileUrl } from '../../config';
+
 const EMPTY_FORM = {
   donor_name: '', donor_email: '', donor_phone: '', type: 'Individual',
   donation_kind: 'Monetary', amount: '', payment_method: 'Cash',
@@ -124,7 +126,7 @@ export default function Donors() {
   const avatarCircle = (name, bg = '#fff3e0', photo = null) => (
     photo ? (
       <img
-        src={`http://localhost:5000${photo}`}
+        src={fileUrl(photo)}
         alt={name || 'Donor'}
         style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1.5px solid var(--border)' }}
       />
@@ -329,14 +331,14 @@ export default function Donors() {
             </div>
             <div style={{ background: '#1a1a1a', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 240, maxHeight: '65vh', overflow: 'auto' }}>
               <img
-                src={`http://localhost:5000${proofView.proof_file}`}
+                src={fileUrl(proofView.proof_file)}
                 alt="Proof of payment"
                 style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain', display: 'block' }}
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 18px' }}>
               
-                href={`http://localhost:5000${proofView.proof_file}`}
+                href={fileUrl(proofView.proof_file)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-outline btn-sm"

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { API } from '../../context/AuthContext';
 import { ConfirmModal } from '../../components/ConfirmDialog';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { API_BASE } from '../../config';
 const PET_TYPES = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Others'];
 const PET_TYPE_ICONS = { Dog: '🐶', Cat: '🐱', Bird: '🐦', Rabbit: '🐰', Others: '🐾' };
 

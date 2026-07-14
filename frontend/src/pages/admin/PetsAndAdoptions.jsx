@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { API } from '../../context/AuthContext';
 import { ConfirmModal } from '../../components/ConfirmDialog';
+import { fileUrl } from '../../config';
 
 // Breeds commonly found in the Philippines, per pet type
 const BREEDS_PH = {
@@ -34,6 +35,7 @@ export default function PetsAndAdoptions() {
   const [applications, setApplications] = useState([]);
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showAddPet, setShowAddPet] = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
   const [editPet, setEditPet] = useState(null);
@@ -66,16 +68,24 @@ export default function PetsAndAdoptions() {
   const fetchAll = async () => {
     setLoading(true);
     try {
+      // No more fake fallback data. If the server is down, we SAY so —
+      // showing invented pets would hide a real bug during a live demo.
       const [p, a, as, ad] = await Promise.all([
-        API.get('/pets/all').catch(() => ({ data: DEMO_PETS })),
-        API.get('/adoptions').catch(() => ({ data: DEMO_APPS })),
-        API.get('/pets/assessments').catch(() => ({ data: DEMO_ASSESSMENTS })),
-        API.get('/adoptions/adopted').catch(() => ({ data: [] })),
+        API.get('/pets/all'),
+        API.get('/adoptions'),
+        API.get('/pets/assessments'),
+        API.get('/adoptions/adopted'),
       ]);
       setPets(p.data);
       setApplications(a.data);
       setAssessments(as.data);
       setAdopted(ad.data);
+      setLoadError('');
+    } catch (err) {
+      setLoadError(
+        err?.response?.data?.error
+        || 'Could not reach the server. Make sure the backend is running (npm run dev in the backend folder).'
+      );
     } finally { setLoading(false); }
   };
 
@@ -251,14 +261,16 @@ export default function PetsAndAdoptions() {
     }
   };
 
-  const handleStatus = async (appId, status) => {
+ const handleStatus = async (appId, status) => {
     const apply = async () => {
       try {
         await API.patch(`/adoptions/${appId}/status`, { status });
-      } catch { /* demo */ }
-      setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
-      showToast(`Application ${status}`);
-      if (status === 'Approved') fetchAll();
+        setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
+        showToast(`Application ${status}`);
+        if (status === 'Approved') fetchAll();
+      } catch (err) {
+        showToast(err?.response?.data?.error || `Failed to ${status.toLowerCase()} the application.`, true);
+      }
     };
 
     if (status === 'Rejected') {
@@ -281,9 +293,8 @@ export default function PetsAndAdoptions() {
           await API.delete(`/adoptions/${appId}`);
           showToast('Application deleted.');
           fetchAll();
-        } catch {
-          setApplications(prev => prev.filter(a => a.id !== appId));
-          showToast('Application deleted (demo mode).');
+        } catch (err) {
+          showToast(err?.response?.data?.error || 'Failed to delete application.', true);
         }
       },
     });
@@ -324,9 +335,8 @@ export default function PetsAndAdoptions() {
           await API.delete(`/pets/${pet.id}`);
           showToast('Pet deleted.');
           fetchAll();
-        } catch {
-          setPets(prev => prev.filter(p => p.id !== pet.id));
-          showToast('Pet deleted (demo mode).');
+        } catch (err) {
+          showToast(err?.response?.data?.error || 'Failed to delete pet.', true);
         }
       },
     });
@@ -343,20 +353,12 @@ export default function PetsAndAdoptions() {
       });
       showToast('Assessment saved!');
       fetchAll();
-    } catch {
-      const pet = pets.find(p => p.id == assessForm.pet_id);
-      const petName = pet ? `${pet.name} - ${pet.breed}` : 'Pet';
-      setAssessments(prev => [...prev, {
-        pet_name: petName,
-        traits: JSON.stringify(traitsArray),
-        description: assessForm.description,
-        compatibility_notes: assessForm.compatibility_notes,
-        created_at: new Date().toISOString(),
-      }]);
-      showToast('Assessment created (demo mode)!');
+    // Only close and reset the form when the save actually WORKED.
+      setShowAssessment(false);
+      setAssessForm({ pet_id: '', traits: '', description: '', compatibility_notes: '' });
+    } catch (err) {
+      showToast(err?.response?.data?.error || 'Failed to save assessment.', true);
     }
-    setShowAssessment(false);
-    setAssessForm({ pet_id: '', traits: '', description: '', compatibility_notes: '' });
   };
 
   const statusBadge = (s) => {
@@ -365,6 +367,17 @@ export default function PetsAndAdoptions() {
   };
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
+
+  if (loadError) return (
+    <div className="card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+      <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Couldn't load pet records</h3>
+      <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 18, lineHeight: 1.5 }}>
+        {loadError}
+      </p>
+      <button className="btn btn-primary" onClick={fetchAll}>Try Again</button>
+    </div>
+  );
 
   // Base list: everything not yet adopted
   const allActivePets = pets.filter(p => p.status !== 'Adopted').sort((a, b) => (a.pet_id || '').localeCompare(b.pet_id || ''));
@@ -402,7 +415,7 @@ export default function PetsAndAdoptions() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {pet.photo ? (
             <img
-              src={`http://localhost:5000${pet.photo}`}
+              src={fileUrl(pet.photo)}
               alt={pet.name}
               style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1.5px solid var(--border)' }}
             />
@@ -446,7 +459,7 @@ export default function PetsAndAdoptions() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {app.applicant_photo ? (
             <img
-              src={`http://localhost:5000${app.applicant_photo}`}
+              src={fileUrl(app.applicant_photo)}
               alt={app.applicant_name || 'Applicant'}
               style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1.5px solid var(--border)' }}
             />
@@ -1118,7 +1131,7 @@ export default function PetsAndAdoptions() {
             {/* Photo */}
             <div style={{ width: '100%', height: 200, borderRadius: 12, overflow: 'hidden', marginBottom: 20, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {viewPet.photo
-                ? <img src={`http://localhost:5000${viewPet.photo}`} alt={viewPet.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img src={fileUrl(viewPet.photo)} alt={viewPet.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : <span style={{ fontSize: 48 }}>🐾</span>
               }
             </div>
@@ -1253,7 +1266,7 @@ export default function PetsAndAdoptions() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
                 <img
                   src={viewApp.applicant_photo
-                    ? `http://localhost:5000${viewApp.applicant_photo}`
+                    ? fileUrl(viewApp.applicant_photo)
                     : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(viewApp.applicant_name || viewApp.full_name || 'User') + '&background=e5e7eb&color=374151'}
                   alt="Applicant"
                   style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
@@ -1304,7 +1317,7 @@ export default function PetsAndAdoptions() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 14, borderBottom: '1px solid #f0f0f0' }}>
                 <img
                   src={viewProfile.profile_photo
-                    ? `http://localhost:5000${viewProfile.profile_photo}`
+                    ? fileUrl(viewProfile.profile_photo)
                     : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(`${viewProfile.first_name} ${viewProfile.last_name}`) + '&background=e5e7eb&color=374151&size=200'}
                   alt="Applicant"
                   style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
@@ -1419,7 +1432,7 @@ export default function PetsAndAdoptions() {
               {editPhotoPreview || editPet.photo ? (
                 <>
                   <img
-                    src={editPhotoPreview || (editPet.photo ? `http://localhost:5000${editPet.photo}` : '')}
+                    src={editPhotoPreview || fileUrl(editPet.photo)}
                     alt={editPet.name}
                     style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }}
                   />
@@ -1811,22 +1824,7 @@ export default function PetsAndAdoptions() {
   );
 }
 
-const DEMO_PETS = [
-  { id: 1, pet_id: 'PET001', name: 'Hedrick', type: 'Dog', breed: 'Poodle', age_years: 1, gender: 'Male', health_status: 'Excellent', status: 'Available' },
-  { id: 2, pet_id: 'PET002', name: 'Golden', type: 'Dog', breed: 'Dalmatian', age_years: 1, gender: 'Male', health_status: 'Excellent', status: 'Available' },
-  { id: 3, pet_id: 'PET003', name: 'Sia', type: 'Cat', breed: 'Siamese', age_years: 1, gender: 'Female', health_status: 'Excellent', status: 'Adopted' },
-];
 
-const DEMO_APPS = [
-  { id: 1, applicant_name: 'Jane Co', applicant_email: 'jaceco@gmail.com', pet_name: 'Buddy', pet_breed: 'Golden Retriever', applied_at: '2025-11-14T10:00:00', status: 'Approved', living_situation: 'House with yard', reason_for_adoption: 'Looking for a companion for my family.' },
-  { id: 2, applicant_name: 'Lauren Garcia', applicant_email: 'laurengarcia@gmail.com', pet_name: 'Sia', pet_breed: 'Siamese', applied_at: '2025-11-22T14:30:00', status: 'Pending Review', living_situation: 'Apartment', reason_for_adoption: 'Always wanted a cat.' },
-  { id: 3, applicant_name: 'Lauren Garcia', applicant_email: 'laurengarcia@gmail.com', pet_name: 'Sia', pet_breed: 'Siamese', applied_at: '2025-11-22T16:00:00', status: 'Pending Review', living_situation: 'House', reason_for_adoption: 'Experienced cat owner.' },
-];
-
-const DEMO_ASSESSMENTS = [
-  { pet_name: 'Buddy', pet_breed: 'Golden Retriever', traits: '["Hyperattached","Friendly","Good with kids"]', description: 'Very social and energetic. Loves playing fetch and interacting with people.', compatibility_notes: 'Ideal for active families with children, good for first-time pet owners.', created_at: null, last_updated: '1 day ago' },
-  { pet_name: 'Max', pet_breed: 'Persian', traits: '["Nonchalant","Scared","Need training"]', description: 'Requires patient owner due to past trauma. Very intelligent and trainable.', compatibility_notes: 'Best suited for experienced cat owners, single adults or couples without small children.', created_at: null, last_updated: '1 day ago' },
-];
 
 const styles = {
   tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },

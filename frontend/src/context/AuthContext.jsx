@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { fileUrl } from '../config';
 
 const AuthContext = createContext(null);
 
@@ -83,11 +84,11 @@ export function AuthProvider({ children }) {
 export const useAuth = () => useContext(AuthContext);
 export { API };
 
-// One single place that decides what image to show for a person.
-// If they uploaded a photo → use it. If not → auto-generate a nice initials circle.
+
+
 export function avatarUrl(person) {
   if (!person) return '';
-  if (person.profile_photo) return `http://localhost:5000${person.profile_photo}`;
+  if (person.profile_photo) return fileUrl(person.profile_photo);
   const name = `${person.first_name || ''} ${person.last_name || ''}`.trim() || person.name || '?';
   return 'https://ui-avatars.com/api/?name=' + encodeURIComponent(name) + '&background=e5e7eb&color=374151&size=200';
 }

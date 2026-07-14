@@ -7,8 +7,7 @@ import shareIcon      from '../../assets/share 1.png';
 import loveIcon       from '../../assets/love 1.png';
 import volunteerIcon  from '../../assets/volunteering 1.png';
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
+import { API_BASE as BASE } from '../../config';
 const PHT_OFFSET = 8 * 60 * 60 * 1000;
 
 function parseDate(dateStr) {

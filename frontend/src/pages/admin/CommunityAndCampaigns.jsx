@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { API } from '../../context/AuthContext';
 import { ConfirmModal } from '../../components/ConfirmDialog';
+import { fileUrl } from '../../config';
 
 const EVENT_TYPES = ['Adoption', 'Volunteer', 'Fundraiser', 'Event', 'Drive', 'Campaign'];
 const NEEDS_TARGET = (type) => type === 'Fundraiser' || type === 'Drive';
@@ -280,7 +281,7 @@ export default function CommunityAndCampaigns() {
   const openEdit = (ev) => {
     setEditEvent(ev);
     setEventPhoto(null);
-    setEventPhotoPreview(ev.banner_image ? `http://localhost:5000${ev.banner_image}` : '');
+    setEventPhotoPreview(ev.banner_image ? fileUrl(ev.banner_image) : '');
     setEditForm({
       title: ev.title,
       type: ev.type,
@@ -630,8 +631,8 @@ export default function CommunityAndCampaigns() {
                   </div>
                 </div>
                 {a.message && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>{a.message}</p>}
-                {a.photo && <img src={`http://localhost:5000${a.photo}`} alt="" style={{ marginTop: 10, maxHeight: 160, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }} />}
-                {a.video && <video src={`http://localhost:5000${a.video}`} controls style={{ marginTop: 10, maxHeight: 200, borderRadius: 'var(--radius-sm)' }} />}
+                {a.photo && <img src={fileUrl(a.photo)} alt="" style={{ marginTop: 10, maxHeight: 160, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }} />}
+                {a.video && <video src={fileUrl(a.video)} controls style={{ marginTop: 10, maxHeight: 200, borderRadius: 'var(--radius-sm)' }} />}
               </div>
             ))}
           </div>

@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
 import { SuccessModal } from '../components/ConfirmDialog';
+import { fileUrl } from '../config';
 
 const EMPTY_FORM = {
   living_situation: '',
@@ -67,7 +68,7 @@ export default function PetDetail() {
   if (!pet) return <div>Pet not found</div>;
 
   const fallback = 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=500&h=400&fit=crop';
-  const img = pet.photo ? `http://localhost:5000${pet.photo}` : (location.state?.photo || fallback);
+  const img = pet.photo ? fileUrl(pet.photo) : (location.state?.photo || fallback);
 
   // Safe parse vaccine log
   let vaccineLog = [];

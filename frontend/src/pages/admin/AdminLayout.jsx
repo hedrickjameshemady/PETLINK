@@ -72,6 +72,16 @@ export default function AdminLayout() {
             >
               <span style={styles.navIcon}>{item.icon}</span>
               {item.label}
+              {item.path === '/admin/messages' && msgUnread > 0 && (
+                <span style={{
+                  marginLeft: 'auto',
+                  background: '#dc3545', color: '#fff',
+                  fontSize: 10.5, fontWeight: 700,
+                  minWidth: 18, height: 18, borderRadius: 9,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '0 5px',
+                }}>{msgUnread}</span>
+              )}
             </Link>
           ))}
         </nav>
