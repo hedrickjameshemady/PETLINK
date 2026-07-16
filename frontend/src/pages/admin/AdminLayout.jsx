@@ -2,14 +2,17 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, API } from '../../context/AuthContext';
 
-const NAV_ITEMS = [
-  { path: '/admin', label: 'Dashboard', icon: '▦' },
-  { path: '/admin/pets', label: 'Pets and Adoptions', icon: '🐾' },
-  { path: '/admin/lost-and-found', label: 'Lost and Found', icon: '🔍' },
-  { path: '/admin/volunteers', label: 'Volunteer Records', icon: '🤝' },
-  { path: '/admin/donors', label: 'Donors', icon: '💝' },
-  { path: '/admin/community', label: 'Community Engagement', icon: '📢' },
-  { path: '/admin/messages', label: 'Messages', icon: '💬' },
+// Every possible menu item, tagged with which roles are allowed to see it.
+const ALL_NAV_ITEMS = [
+  { path: '/admin', label: 'Dashboard', icon: '▦', roles: ['admin', 'staff'] },
+  { path: '/admin/pets', label: 'Pets and Adoptions', icon: '🐾', roles: ['admin', 'staff'] },
+  { path: '/admin/foster-applicants', label: 'My Foster Applicants', icon: '⭐', roles: ['foster'] },
+  { path: '/admin/lost-and-found', label: 'Lost and Found', icon: '🔍', roles: ['admin', 'staff', 'lost_found_manager'] },
+  { path: '/admin/volunteers', label: 'Volunteer Records', icon: '🤝', roles: ['admin', 'staff'] },
+  { path: '/admin/donors', label: 'Donors', icon: '💝', roles: ['admin', 'staff'] },
+  { path: '/admin/community', label: 'Community Engagement', icon: '📢', roles: ['admin', 'staff'] },
+  { path: '/admin/messages', label: 'Messages', icon: '💬', roles: ['admin', 'staff'] },
+  { path: '/admin/accounts', label: 'Manage Accounts', icon: '👤', roles: ['admin', 'staff'] },
 ];
 
 const QUICK_ACTIONS = [
@@ -23,6 +26,16 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Show only the menu items this user's role is allowed to see.
+  const NAV_ITEMS = ALL_NAV_ITEMS.filter(item => item.roles.includes(user?.role));
+
+  // A friendly label for each role, shown under the user's name.
+  const ROLE_LABELS = {
+    admin: 'Administrator',
+    staff: 'Staff',
+    foster: 'Foster',
+    lost_found_manager: 'Lost & Found Manager',
+  };
   const [pendingCount, setPendingCount] = useState(0);
   useEffect(() => {
     API.get('/dashboard-stats')
@@ -44,6 +57,14 @@ export default function AdminLayout() {
   const isActive = (path) => path === '/admin'
     ? location.pathname === '/admin'
     : location.pathname.startsWith(path);
+
+  // Fosters and lost&found managers have no Dashboard — send them to their real page.
+  useEffect(() => {
+    if (location.pathname === '/admin') {
+      if (user?.role === 'foster') navigate('/admin/foster-applicants', { replace: true });
+      else if (user?.role === 'lost_found_manager') navigate('/admin/lost-and-found', { replace: true });
+    }
+  }, [user, location.pathname, navigate]);
 
   return (
     <div style={styles.shell}>
@@ -86,16 +107,20 @@ export default function AdminLayout() {
           ))}
         </nav>
 
-        {/* Quick Actions */}
-        <div style={{ ...styles.sectionLabel, marginTop: 28 }}>Quick Actions</div>
-        <div style={styles.quickActions}>
-          {QUICK_ACTIONS.map(q => (
-            <Link key={q.label} to={q.link} style={styles.quickItem}>
-              <span style={{ ...styles.quickIcon, background: q.color }}>{q.icon}</span>
-              <span style={{ fontSize: 13, color: 'var(--text-mid)', fontWeight: 450 }}>{q.label}</span>
-            </Link>
-          ))}
-        </div>
+        {/* Quick Actions — only for admin/staff */}
+        {(user?.role === 'admin' || user?.role === 'staff') && (
+          <>
+            <div style={{ ...styles.sectionLabel, marginTop: 28 }}>Quick Actions</div>
+            <div style={styles.quickActions}>
+              {QUICK_ACTIONS.map(q => (
+                <Link key={q.label} to={q.link} style={styles.quickItem}>
+                  <span style={{ ...styles.quickIcon, background: q.color }}>{q.icon}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-mid)', fontWeight: 450 }}>{q.label}</span>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* User */}
         <div style={styles.sidebarUser}>
@@ -104,7 +129,7 @@ export default function AdminLayout() {
           </div>
           <div style={styles.userInfo}>
             <div style={styles.userName}>{user?.first_name} {user?.last_name}</div>
-            <div style={styles.userRole}>{user?.role === 'admin' ? 'Administrator' : 'Staff'}</div>
+            <div style={styles.userRole}>{ROLE_LABELS[user?.role] || 'Staff'}</div>
           </div>
           <button onClick={() => { logout(); navigate('/'); }} style={styles.logoutBtn} title="Logout">⏻</button>
         </div>

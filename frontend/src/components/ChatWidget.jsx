@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { API, useAuth, avatarUrl } from '../context/AuthContext';
+import { fileUrl } from '../config';
 
 export default function ChatWidget() {
   const { user } = useAuth();

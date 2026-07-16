@@ -22,4 +22,27 @@ const adminMiddleware = (req, res, next) => {
   next();
 };
 
-module.exports = { authMiddleware, adminMiddleware };
+// Only a real admin (not staff) — used for creating other accounts if you ever want to lock it down.
+// NOTE: You asked that BOTH admin and staff can create accounts, so we use adminMiddleware for that.
+const superAdminMiddleware = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+  next();
+};
+
+// Reviewers = anyone allowed to STAR-RATE adoption applicants: admin, staff, or a foster.
+const reviewerMiddleware = (req, res, next) => {
+  const r = req.user.role;
+  if (r === 'admin' || r === 'staff' || r === 'foster') return next();
+  return res.status(403).json({ error: 'Access denied' });
+};
+
+// Lost & Found managers (plus admin/staff, who can do everything).
+const lostFoundMiddleware = (req, res, next) => {
+  const r = req.user.role;
+  if (r === 'admin' || r === 'staff' || r === 'lost_found_manager') return next();
+  return res.status(403).json({ error: 'Access denied' });
+};
+
+module.exports = { authMiddleware, adminMiddleware, superAdminMiddleware, reviewerMiddleware, lostFoundMiddleware };

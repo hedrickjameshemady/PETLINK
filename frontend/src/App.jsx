@@ -20,17 +20,23 @@ import VolunteerRecords from './pages/admin/VolunteerRecords';
 import Donors from './pages/admin/Donors';
 import CommunityAndCampaigns from './pages/admin/CommunityAndCampaigns';
 import AdminLostAndFound from './pages/admin/AdminLostAndFound';
+import ManageAccounts from './pages/admin/ManageAccounts';
+import FosterApplicants from './pages/admin/FosterApplicants';
 
 import UserDashboard from './pages/user/UserDashboard';
 import Profile from './pages/Profile';
 import ChatWidget from './components/ChatWidget';
 import AdminMessages from './pages/admin/AdminMessages';
 
+// Any staff-type role that belongs inside the /admin panel
+const STAFF_ROLES = ['admin', 'staff', 'foster', 'lost_found_manager'];
+const isStaff = (u) => u && STAFF_ROLES.includes(u.role);
+
 function GuestOnly({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-spinner"><div className="spinner"/></div>;
   if (user) {
-    if (user.role === 'admin' || user.role === 'staff') return <Navigate to="/admin" replace />;
+    if (isStaff(user)) return <Navigate to="/admin" replace />;
     return <Navigate to="/dashboard" replace />;
   }
   return children;
@@ -40,7 +46,7 @@ function ProtectedAdmin({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-spinner"><div className="spinner"/></div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'admin' && user.role !== 'staff') return <Navigate to="/dashboard" replace />;
+  if (!isStaff(user)) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
@@ -48,15 +54,15 @@ function ProtectedUser({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-spinner"><div className="spinner"/></div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role === 'admin' || user.role === 'staff') return <Navigate to="/admin" replace />;
+  if (isStaff(user)) return <Navigate to="/admin" replace />;
   return children;
 }
 
-// Root doorman: admins/staff who open the site go straight to the admin panel
+// Root doorman: staff-type users who open the site go straight to the admin panel
 function RootGate() {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-spinner"><div className="spinner"/></div>;
-  if (user && (user.role === 'admin' || user.role === 'staff')) return <Navigate to="/admin" replace />;
+  if (isStaff(user)) return <Navigate to="/admin" replace />;
   return <Home />;
 }
 
@@ -97,6 +103,8 @@ export default function App() {
             <Route path="community" element={<CommunityAndCampaigns />} />
             <Route path="lost-and-found" element={<AdminLostAndFound />} />
             <Route path="messages" element={<AdminMessages />} />
+            <Route path="accounts" element={<ManageAccounts />} />
+            <Route path="foster-applicants" element={<FosterApplicants />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

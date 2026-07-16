@@ -30,6 +30,8 @@ const rulesFor = (type) => SPECIES_RULES[type] || SPECIES_RULES.Other;
 // Icons for the pet-type filter chips
 const TYPE_ICONS = { All: '✨', Dog: '🐶', Cat: '🐱', Bird: '🐦', Rabbit: '🐰', Other: '🐾' };
 
+import ApplicantGrading from '../../components/ApplicantGrading';
+
 export default function PetsAndAdoptions() {
   const [pets, setPets] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -52,7 +54,7 @@ export default function PetsAndAdoptions() {
   const [followForm, setFollowForm] = useState({ followup_date: '', outcome: 'Doing Well', notes: '' });
   const [toast, setToast] = useState('');
   const [confirmState, setConfirmState] = useState(null);
-  const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [] });
+  const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [], fostered_by: '' });
   const [petPhotoFile, setPetPhotoFile] = useState(null);
   const [customBreed, setCustomBreed] = useState(false);
   const [petPhotoPreview, setPetPhotoPreview] = useState(null);
@@ -62,6 +64,8 @@ export default function PetsAndAdoptions() {
   const [petTypeFilter, setPetTypeFilter] = useState('All'); // Dog / Cat / Bird / ...
   const [petSearch, setPetSearch] = useState('');
   const [petStatusFilter, setPetStatusFilter] = useState('All');
+  const [fosters, setFosters] = useState([]);          // foster accounts for the dropdown
+  const [gradingPet, setGradingPet] = useState(null);  // which pet's applicants we're grading
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -70,16 +74,18 @@ export default function PetsAndAdoptions() {
     try {
       // No more fake fallback data. If the server is down, we SAY so —
       // showing invented pets would hide a real bug during a live demo.
-      const [p, a, as, ad] = await Promise.all([
+      const [p, a, as, ad, fo] = await Promise.all([
         API.get('/pets/all'),
         API.get('/adoptions'),
         API.get('/pets/assessments'),
         API.get('/adoptions/adopted'),
+        API.get('/auth/admin/fosters'),
       ]);
       setPets(p.data);
       setApplications(a.data);
       setAssessments(as.data);
       setAdopted(ad.data);
+      setFosters(fo.data);
       setLoadError('');
     } catch (err) {
       setLoadError(
@@ -95,7 +101,7 @@ export default function PetsAndAdoptions() {
   };
 
   // The blank starting form — kept in one place so Add + Reset always match.
-  const EMPTY_PET = { name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [] };
+  const EMPTY_PET = { name: '', type: 'Dog', breed: '', age_years: '', weight: '', gender: 'Male', health_status: 'Excellent', status: 'Available', description: '', intake_date: '', traits: [], vet_name: '', clinic_name: '', last_checkup_date: '', vaccines_given: '', medical_notes: '', vaccination_status: false, neutered: false, neutered_date: '', vaccine_log: [], fostered_by: '' };
 
   /**
    * Checks a pet form and returns an object of { fieldName: "error message" }.
@@ -435,6 +441,11 @@ export default function PetsAndAdoptions() {
       <td>{statusBadge(pet.health_status)}</td>
       <td>{statusBadge(pet.status)}</td>
       <td>
+        {pet.foster_name
+          ? <span className="badge badge-green">{pet.foster_name}</span>
+          : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>}
+      </td>
+      <td>
         <div style={{ display: 'flex', gap: 12 }}>
           <button style={styles.linkBtn} onClick={() => setViewPet(pet)}>View</button>
           <button style={{ ...styles.linkBtn, color: '#dc3545' }} onClick={() => handleDeletePet(pet)}>Delete</button>
@@ -601,7 +612,7 @@ export default function PetsAndAdoptions() {
             </div>
             <div style={styles.scrollTable}>
               <table>
-                <thead><tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>WEIGHT</th><th>HEALTH</th><th>STATUS</th><th></th></tr></thead>
+                <thead><tr><th>PET</th><th>TYPE</th><th>BREED</th><th>AGE</th><th>WEIGHT</th><th>HEALTH</th><th>STATUS</th><th>FOSTERED BY</th><th></th></tr></thead>
                 <tbody>{group.items.map(petRow)}</tbody>
               </table>
             </div>
@@ -910,6 +921,13 @@ export default function PetsAndAdoptions() {
                   <label className="form-label" style={{ fontWeight: 700 }}>Status</label>
                   <select className="form-select" value={petForm.status} onChange={e => setPetForm({ ...petForm, status: e.target.value })}>
                     {['Available','Not Available'].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Fostered By</label>
+                  <select className="form-select" value={petForm.fostered_by || ''} onChange={e => setPetForm({ ...petForm, fostered_by: e.target.value })}>
+                    <option value="">— No foster assigned —</option>
+                    {fosters.map(f => <option key={f.id} value={f.id}>{f.first_name} {f.last_name}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
@@ -1227,6 +1245,7 @@ export default function PetsAndAdoptions() {
                   gender: viewPet.gender || 'Male',
                   health_status: viewPet.health_status || 'Good',
                   status: viewPet.status || 'Available',
+                  fostered_by: viewPet.fostered_by ?? '',
                   description: viewPet.description || '',
                   vet_name: viewPet.vet_name || '',
                   clinic_name: viewPet.clinic_name || '',
@@ -1253,6 +1272,19 @@ export default function PetsAndAdoptions() {
           </div>
         </div>
       )}
+      {/* ─── GRADE APPLICANTS MODAL (star comparison) ─── */}
+      {gradingPet && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setGradingPet(null)}>
+          <div className="modal" style={{ maxWidth: 900, width: '92%' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Grade Applicants — {gradingPet.name}</h2>
+              <button className="modal-close" onClick={() => setGradingPet(null)}>✕</button>
+            </div>
+            <ApplicantGrading petId={gradingPet.id} petName={gradingPet.name} />
+          </div>
+        </div>
+      )}
+
       {/* ─── VIEW APPLICATION MODAL ─── */}
       {viewApp && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewApp(null)}>
@@ -1293,6 +1325,10 @@ export default function PetsAndAdoptions() {
               {viewApp.reason_for_adoption && <div style={styles.detailRow}><span style={styles.detailLbl}>Reason</span><span>{viewApp.reason_for_adoption}</span></div>}
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => { setGradingPet({ id: viewApp.pet_id, name: viewApp.pet_name }); setViewApp(null); }}
+              >⭐ Grade All Applicants</button>
               {viewApp.status === 'Pending Review' && (
                 <>
                   <button className="btn btn-danger btn-sm" onClick={() => { handleStatus(viewApp.id, 'Rejected'); setViewApp(null); }}>Reject</button>
@@ -1573,6 +1609,13 @@ export default function PetsAndAdoptions() {
                   <label className="form-label" style={{ fontWeight: 700 }}>Status</label>
                   <select className="form-select" value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}>
                     {['Available','Pending','Adopted','Not Available'].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Fostered By</label>
+                  <select className="form-select" value={editForm.fostered_by || ''} onChange={e => setEditForm({ ...editForm, fostered_by: e.target.value })}>
+                    <option value="">— No foster assigned —</option>
+                    {fosters.map(f => <option key={f.id} value={f.id}>{f.first_name} {f.last_name}</option>)}
                   </select>
                 </div>
                 <div className="form-group">

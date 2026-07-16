@@ -117,4 +117,66 @@ router.get('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── ADMIN/STAFF: create a system account (staff, admin, foster, lost_found_manager) ───
+router.post('/admin/create-account', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { first_name, last_name, email, password, phone, role } = req.body;
+    const allowedRoles = ['staff', 'admin', 'foster', 'lost_found_manager'];
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+    if (!first_name || !last_name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email and password are required' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    const [exists] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (exists.length > 0) return res.status(409).json({ error: 'Email already registered' });
+
+    const hash = await bcrypt.hash(password, 10);
+    const [result] = await db.query(
+      'INSERT INTO users (first_name, last_name, email, password_hash, phone, role) VALUES (?,?,?,?,?,?)',
+      [first_name, last_name, email, hash, phone || null, role]
+    );
+    res.status(201).json({ id: result.insertId, message: `${role} account created` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── ADMIN/STAFF: list all staff-type accounts (for a management table) ───
+router.get('/admin/accounts', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, first_name, last_name, email, phone, role, created_at
+       FROM users
+       WHERE role IN ('staff','admin','foster','lost_found_manager')
+       ORDER BY role ASC, created_at DESC`
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── ADMIN/STAFF: list just the fosters (for the "Fostered By" dropdown) ───
+router.get('/admin/fosters', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, first_name, last_name, email FROM users WHERE role = 'foster' ORDER BY first_name ASC`
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── ADMIN/STAFF: delete a system account ───
+router.delete('/admin/accounts/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    // Don't let someone delete their own logged-in account by accident
+    if (Number(req.params.id) === req.user.id) {
+      return res.status(400).json({ error: "You can't delete your own account while logged in." });
+    }
+    await db.query('DELETE FROM users WHERE id = ? AND role IN (?,?,?,?)',
+      [req.params.id, 'staff', 'admin', 'foster', 'lost_found_manager']);
+    res.json({ message: 'Account deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

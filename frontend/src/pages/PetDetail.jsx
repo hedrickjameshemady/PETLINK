@@ -7,11 +7,29 @@ import { SuccessModal } from '../components/ConfirmDialog';
 import { fileUrl } from '../config';
 
 const EMPTY_FORM = {
+  // Household & housing
   living_situation: '',
+  housing_type: '',
+  rent_or_own: '',
+  landlord_allows_pets: '',
   has_yard: false,
-  other_pets: '',
+  household_size: '',
+  family_agrees: '',
   children_at_home: '',
+  allergies: '',
+  // Pet experience
+  other_pets: '',
+  previous_pets: '',
+  current_pets_neutered: '',
+  vet_info: '',
   experience_with_pets: '',
+  // Care & commitment
+  hours_alone: '',
+  who_cares_when_away: '',
+  can_afford_care: '',
+  if_you_move: '',
+  lifetime_commitment: '',
+  home_visit_ok: '',
   reason_for_adoption: '',
   preferred_contact: 'Email',
 };
@@ -185,6 +203,7 @@ export default function PetDetail() {
               <div style={styles.detailItem}><span style={styles.detailLabel}>Gender</span><span>{pet.gender}</span></div>
               {pet.weight && <div style={styles.detailItem}><span style={styles.detailLabel}>Weight</span><span>{pet.weight} kg</span></div>}
               {pet.color && <div style={styles.detailItem}><span style={styles.detailLabel}>Color</span><span>{pet.color}</span></div>}
+              {pet.foster_name && <div style={styles.detailItem}><span style={styles.detailLabel}>Fostered By</span><span>{pet.foster_name}</span></div>}
             </div>
 
             {pet.description && <p style={styles.desc}>{pet.description}</p>}
@@ -286,8 +305,56 @@ export default function PetDetail() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Other pets at home</label>
-                  <input className="form-input" placeholder="E.g. 1 dog, 2 cats or None" value={form.other_pets} onChange={e => setForm({...form, other_pets: e.target.value})} />
+                  <label className="form-label">Housing type</label>
+                  <select className="form-select" value={form.housing_type} onChange={e => setForm({...form, housing_type: e.target.value})} required>
+                    <option value="">Select...</option>
+                    <option>House</option>
+                    <option>Apartment</option>
+                    <option>Condo</option>
+                    <option>Townhouse</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Do you rent or own your home?</label>
+                  <select className="form-select" value={form.rent_or_own} onChange={e => setForm({...form, rent_or_own: e.target.value})} required>
+                    <option value="">Select...</option>
+                    <option>Own</option>
+                    <option>Rent</option>
+                    <option>Living with family</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">If renting, does your landlord allow pets?</label>
+                  <select className="form-select" value={form.landlord_allows_pets} onChange={e => setForm({...form, landlord_allows_pets: e.target.value})}>
+                    <option value="">Select / Not applicable</option>
+                    <option>Yes</option>
+                    <option>No</option>
+                    <option>Not sure</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">How many people live in your household?</label>
+                  <select className="form-select" value={form.household_size} onChange={e => setForm({...form, household_size: e.target.value})} required>
+                    <option value="">Select...</option>
+                    <option>Just me</option>
+                    <option>2-3</option>
+                    <option>4-5</option>
+                    <option>6+</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Does everyone in the household agree to adopt?</label>
+                  <select className="form-select" value={form.family_agrees} onChange={e => setForm({...form, family_agrees: e.target.value})} required>
+                    <option value="">Select...</option>
+                    <option>Yes</option>
+                    <option>No</option>
+                    <option>Some do</option>
+                  </select>
                 </div>
 
                 <div className="form-group">
@@ -302,8 +369,91 @@ export default function PetDetail() {
                 </div>
 
                 <div className="form-group">
+                  <label className="form-label">Anyone in the home with pet allergies?</label>
+                  <select className="form-select" value={form.allergies} onChange={e => setForm({...form, allergies: e.target.value})}>
+                    <option value="">Select...</option>
+                    <option>No</option>
+                    <option>Yes</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Other pets at home</label>
+                  <input className="form-input" placeholder="E.g. 1 dog, 2 cats or None" value={form.other_pets} onChange={e => setForm({...form, other_pets: e.target.value})} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Are your current pets spayed/neutered?</label>
+                  <select className="form-select" value={form.current_pets_neutered} onChange={e => setForm({...form, current_pets_neutered: e.target.value})}>
+                    <option value="">Select / No other pets</option>
+                    <option>Yes, all of them</option>
+                    <option>Some of them</option>
+                    <option>No</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Previous pets you've owned</label>
+                  <textarea className="form-textarea" placeholder="What pets have you had, and what happened to them?" value={form.previous_pets} onChange={e => setForm({...form, previous_pets: e.target.value})} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Your veterinarian (name / clinic)</label>
+                  <input className="form-input" placeholder="Vet or clinic name (if any)" value={form.vet_info} onChange={e => setForm({...form, vet_info: e.target.value})} />
+                </div>
+
+                <div className="form-group">
                   <label className="form-label">Experience with pets</label>
                   <textarea className="form-textarea" placeholder="Describe your experience..." value={form.experience_with_pets} onChange={e => setForm({...form, experience_with_pets: e.target.value})} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">How many hours a day will the pet be left alone?</label>
+                  <select className="form-select" value={form.hours_alone} onChange={e => setForm({...form, hours_alone: e.target.value})} required>
+                    <option value="">Select...</option>
+                    <option>Rarely alone</option>
+                    <option>1-4 hours</option>
+                    <option>5-8 hours</option>
+                    <option>More than 8 hours</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Who will care for the pet when you're away/travelling?</label>
+                  <textarea className="form-textarea" placeholder="E.g. family member, pet sitter, boarding..." value={form.who_cares_when_away} onChange={e => setForm({...form, who_cares_when_away: e.target.value})} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Can you afford food, grooming, and medical care?</label>
+                  <select className="form-select" value={form.can_afford_care} onChange={e => setForm({...form, can_afford_care: e.target.value})} required>
+                    <option value="">Select...</option>
+                    <option>Yes</option>
+                    <option>Not sure</option>
+                    <option>No</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">What would you do with the pet if you move?</label>
+                  <textarea className="form-textarea" placeholder="Explain your plan..." value={form.if_you_move} onChange={e => setForm({...form, if_you_move: e.target.value})} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Do you commit to caring for this pet for its whole life?</label>
+                  <select className="form-select" value={form.lifetime_commitment} onChange={e => setForm({...form, lifetime_commitment: e.target.value})} required>
+                    <option value="">Select...</option>
+                    <option>Yes</option>
+                    <option>No</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Are you okay with a home visit before approval?</label>
+                  <select className="form-select" value={form.home_visit_ok} onChange={e => setForm({...form, home_visit_ok: e.target.value})}>
+                    <option value="">Select...</option>
+                    <option>Yes</option>
+                    <option>No</option>
+                  </select>
                 </div>
 
                 <div className="form-group">

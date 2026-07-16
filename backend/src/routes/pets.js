@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../config/db');
-const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware, reviewerMiddleware } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -66,7 +66,12 @@ router.get('/', optionalAuth, async (req, res) => {
 // Get ALL pets including Adopted (admin only)
 router.get('/all', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM pets ORDER BY pet_id ASC');
+    const [rows] = await db.query(`
+      SELECT p.*, CONCAT(f.first_name, ' ', f.last_name) AS foster_name
+      FROM pets p
+      LEFT JOIN users f ON p.fostered_by = f.id
+      ORDER BY p.pet_id ASC
+    `);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -94,8 +99,11 @@ router.get('/:id', optionalAuth, async (req, res) => {
         EXISTS(
           SELECT 1 FROM adoption_applications aa
           WHERE aa.pet_id = p.id AND aa.applicant_id = ? AND aa.status = 'Pending Review'
-        ) AS my_pending
-       FROM pets p WHERE p.id = ?`,
+        ) AS my_pending,
+        CONCAT(f.first_name, ' ', f.last_name) AS foster_name
+       FROM pets p
+       LEFT JOIN users f ON p.fostered_by = f.id
+       WHERE p.id = ?`,
       [userId, req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Pet not found' });
@@ -111,7 +119,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // Create pet (admin/staff)
 router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, vaccine_log, neutered_date } = req.body;
+    const { name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, vaccine_log, neutered_date, fostered_by } = req.body;
     const photoUrl = req.file ? `/uploads/pets/${req.file.filename}` : null;
 
     // FormData turns everything into TEXT. The string "false" is TRUTHY in JS!
@@ -132,8 +140,8 @@ router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async 
     const petId = `PET${String(nextId).padStart(3, '0')}`;
 
     const [result] = await db.query(
-      `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by, photo, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, neutered_date, vaccine_log)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO pets (pet_id, name, type, breed, age_years, age_months, gender, color, weight, health_status, vaccination_status, neutered, microchipped, status, description, intake_date, created_by, photo, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, neutered_date, vaccine_log, fostered_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         petId, name, type, nullify(breed),
         num(age_years), num(age_months),
@@ -150,16 +158,22 @@ router.post('/', authMiddleware, adminMiddleware, upload.single('photo'), async 
         nullify(vaccines_given), nullify(medical_notes),
         isNeutered ? nullify(neutered_date) : null,      // no date if not neutered
         isVaccinated ? cleanLog(vaccine_log) : null,     // no log if not vaccinated
+        nullify(fostered_by),                            // which foster cares for this pet
       ]
     );
     res.status(201).json({ id: result.insertId, pet_id: petId, message: 'Pet added successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Update pet
-router.put('/:id', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
+// Update pet (admin/staff, OR a foster editing their OWN fostered pet)
+router.put('/:id', authMiddleware, reviewerMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { name, type, breed, age_years, gender, weight, color, intake_date, health_status, status, description, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, vaccination_status, neutered, neutered_date, vaccine_log } = req.body;
+    // A foster may only edit a pet they actually foster.
+    if (req.user.role === 'foster') {
+      const [own] = await db.query('SELECT id FROM pets WHERE id = ? AND fostered_by = ?', [req.params.id, req.user.id]);
+      if (own.length === 0) return res.status(403).json({ error: 'Not your foster pet' });
+    }
+    const { name, type, breed, age_years, gender, weight, color, intake_date, health_status, status, description, vet_name, clinic_name, last_checkup_date, vaccines_given, medical_notes, vaccination_status, neutered, neutered_date, vaccine_log, fostered_by } = req.body;
     const nullify = (v) => (v === '' || v === undefined || v === null || v === 'null' || v === 'undefined') ? null : v;
     const toBool = (v) => (v === true || v === 'true' || v === 1 || v === '1') ? 1 : 0;
     const num = (v) => (v === '' || v === undefined || v === null || v === 'null') ? null : Number(v);
@@ -171,15 +185,17 @@ router.put('/:id', authMiddleware, adminMiddleware, upload.single('photo'), asyn
     const fields = [
       name, type, nullify(breed), num(age_years), gender,
       num(weight), nullify(color), nullify(intake_date),
-      health_status, status, nullify(description),
+      health_status, status, nullify(description),  
       nullify(vet_name), nullify(clinic_name), nullify(last_checkup_date),
       nullify(vaccines_given), nullify(medical_notes),
       isVaccinated,
       isNeutered,
       isNeutered ? nullify(neutered_date) : null,
       isVaccinated ? cleanLog(vaccine_log) : null,
+      // A foster can't hand the pet to someone else — keep them as the foster.
+      req.user.role === 'foster' ? req.user.id : nullify(fostered_by),
     ];
-    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, weight=?, color=?, intake_date=?, health_status=?, status=?, description=?, vet_name=?, clinic_name=?, last_checkup_date=?, vaccines_given=?, medical_notes=?, vaccination_status=?, neutered=?, neutered_date=?, vaccine_log=?';
+    let query = 'UPDATE pets SET name=?, type=?, breed=?, age_years=?, gender=?, weight=?, color=?, intake_date=?, health_status=?, status=?, description=?, vet_name=?, clinic_name=?, last_checkup_date=?, vaccines_given=?, medical_notes=?, vaccination_status=?, neutered=?, neutered_date=?, vaccine_log=?, fostered_by=?';
     if (req.file) {
       query += ', photo=?';
       fields.push(`/uploads/pets/${req.file.filename}`);

@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../config/db');
-const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware, reviewerMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -44,7 +44,13 @@ router.get('/my', authMiddleware, async (req, res) => {
 // Submit application
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { pet_id, living_situation, has_yard, other_pets, children_at_home, experience_with_pets, reason_for_adoption, preferred_contact } = req.body;
+    const {
+      pet_id, living_situation, has_yard, other_pets, children_at_home,
+      experience_with_pets, reason_for_adoption, preferred_contact,
+      housing_type, rent_or_own, landlord_allows_pets, household_size, family_agrees,
+      allergies, previous_pets, current_pets_neutered, vet_info, hours_alone,
+      who_cares_when_away, can_afford_care, if_you_move, lifetime_commitment, home_visit_ok
+    } = req.body;
 
     // Prevent duplicate active applications from the same user for the same pet
     const [dupe] = await db.query(
@@ -60,9 +66,18 @@ router.post('/', authMiddleware, async (req, res) => {
     const appId = `APP${String(nextNum).padStart(3, '0')}`;
 
     const [result] = await db.query(
-      `INSERT INTO adoption_applications (application_id, applicant_id, pet_id, living_situation, has_yard, other_pets, children_at_home, experience_with_pets, reason_for_adoption, preferred_contact)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [appId, req.user.id, pet_id, living_situation, has_yard, other_pets, children_at_home, experience_with_pets, reason_for_adoption, preferred_contact]
+      `INSERT INTO adoption_applications
+        (application_id, applicant_id, pet_id, living_situation, has_yard, other_pets, children_at_home,
+         experience_with_pets, reason_for_adoption, preferred_contact,
+         housing_type, rent_or_own, landlord_allows_pets, household_size, family_agrees,
+         allergies, previous_pets, current_pets_neutered, vet_info, hours_alone,
+         who_cares_when_away, can_afford_care, if_you_move, lifetime_commitment, home_visit_ok)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [appId, req.user.id, pet_id, living_situation, has_yard, other_pets, children_at_home,
+       experience_with_pets, reason_for_adoption, preferred_contact,
+       housing_type || null, rent_or_own || null, landlord_allows_pets || null, household_size || null, family_agrees || null,
+       allergies || null, previous_pets || null, current_pets_neutered || null, vet_info || null, hours_alone || null,
+       who_cares_when_away || null, can_afford_care || null, if_you_move || null, lifetime_commitment || null, home_visit_ok || null]
     );
 
     // NOTE: We do NOT change the pet's global status here.
@@ -72,24 +87,68 @@ router.post('/', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Approve/Reject application
-router.patch('/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
+// Approve/Reject application (admin, staff, or the pet's own foster)
+router.patch('/:id/status', authMiddleware, reviewerMiddleware, async (req, res) => {
   try {
     const { status, review_notes } = req.body;
+
+    // A foster may only decide on applicants for pets THEY foster.
+    if (req.user.role === 'foster') {
+      const [chk] = await db.query(
+        `SELECT aa.id FROM adoption_applications aa
+         JOIN pets p ON aa.pet_id = p.id
+         WHERE aa.id = ? AND p.fostered_by = ?`,
+        [req.params.id, req.user.id]
+      );
+      if (chk.length === 0) return res.status(403).json({ error: 'Not your foster pet' });
+    }
+
     await db.query(
       'UPDATE adoption_applications SET status=?, reviewed_by=?, review_notes=?, reviewed_at=NOW() WHERE id=?',
       [status, req.user.id, review_notes, req.params.id]
     );
 
+    // Look up who applied + which pet, so we can notify them by name.
+    const [decided] = await db.query(
+      `SELECT aa.applicant_id, p.id AS pet_id, p.name AS pet_name
+       FROM adoption_applications aa JOIN pets p ON aa.pet_id = p.id
+       WHERE aa.id = ?`,
+      [req.params.id]
+    );
+
     if (status === 'Approved') {
-      const [app] = await db.query('SELECT pet_id FROM adoption_applications WHERE id = ?', [req.params.id]);
-      await db.query("UPDATE pets SET status = 'Adopted' WHERE id = ?", [app[0].pet_id]);
+      const petId = decided[0].pet_id;
+      await db.query("UPDATE pets SET status = 'Adopted' WHERE id = ?", [petId]);
+
+      // Everyone else still pending for this pet gets auto-rejected...
       await db.query(
         "UPDATE adoption_applications SET status = 'Rejected', review_notes = 'Another applicant was selected.' WHERE pet_id = ? AND id != ? AND status = 'Pending Review'",
-        [app[0].pet_id, req.params.id]
+        [petId, req.params.id]
       );
+
+      // ...and we notify each of those auto-rejected applicants too.
+      const [others] = await db.query(
+        "SELECT applicant_id FROM adoption_applications WHERE pet_id = ? AND id != ? AND status = 'Rejected' AND review_notes = 'Another applicant was selected.'",
+        [petId, req.params.id]
+      );
+      for (const o of others) {
+        await db.query(
+          'INSERT INTO notifications (user_id, title, message, type) VALUES (?,?,?,?)',
+          [o.applicant_id, 'Adoption Update',
+           `Thank you for applying to adopt ${decided[0].pet_name}. Another applicant was selected this time, but we truly appreciate your interest and hope you'll consider adopting another pet.`,
+           'adoption']
+        );
+      }
     }
-    // On 'Rejected' we do nothing to the pet — it was never globally Pending.
+
+    // Notify the applicant whose status we just set.
+    const notifMsg = status === 'Approved'
+      ? `Congratulations! Your application to adopt ${decided[0].pet_name} has been approved. Our team will contact you soon with the next steps.`
+      : `Thank you for applying to adopt ${decided[0].pet_name}. After careful review, we're unable to approve your application at this time. You're welcome to apply for other pets.`;
+    await db.query(
+      'INSERT INTO notifications (user_id, title, message, type) VALUES (?,?,?,?)',
+      [decided[0].applicant_id, 'Adoption Update', notifMsg, 'adoption']
+    );
 
     res.json({ message: `Application ${status}` });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -144,6 +203,100 @@ router.post('/:id/followups', authMiddleware, adminMiddleware, async (req, res) 
       [req.params.id, followup_date, outcome || 'Doing Well', notes || null, req.user.id]
     );
     res.status(201).json({ id: result.insertId, message: 'Follow-up recorded' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Delete an application (admin/staff) — frontend already calls this ───
+router.delete('/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await db.query('DELETE FROM adoption_applications WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Application deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── REVIEWERS: all applicants for ONE pet, sorted best-star-average first ───
+// Fosters may only view applicants for pets they foster.
+router.get('/pet/:petId/applicants', authMiddleware, reviewerMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === 'foster') {
+      const [own] = await db.query('SELECT id FROM pets WHERE id = ? AND fostered_by = ?', [req.params.petId, req.user.id]);
+      if (own.length === 0) return res.status(403).json({ error: 'Not your foster pet' });
+    }
+    const [rows] = await db.query(
+      `SELECT aa.*,
+        CONCAT(u.first_name,' ',u.last_name) AS applicant_name,
+        u.email AS applicant_email,
+        u.profile_photo AS applicant_photo,
+        (SELECT ROUND(AVG(r.stars),2) FROM adoption_ratings r WHERE r.application_id = aa.id) AS avg_stars,
+        (SELECT COUNT(*)             FROM adoption_ratings r WHERE r.application_id = aa.id) AS rating_count,
+        (SELECT r.stars FROM adoption_ratings r WHERE r.application_id = aa.id AND r.reviewer_id = ?) AS my_stars
+       FROM adoption_applications aa
+       JOIN users u ON aa.applicant_id = u.id
+       WHERE aa.pet_id = ?
+       ORDER BY (avg_stars IS NULL), avg_stars DESC, aa.applied_at ASC`,
+      [req.user.id, req.params.petId]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── REVIEWERS: all individual star ratings on ONE application (who gave what) ───
+router.get('/:appId/ratings', authMiddleware, reviewerMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT r.*, CONCAT(u.first_name,' ',u.last_name) AS reviewer_name, u.role AS reviewer_role
+       FROM adoption_ratings r JOIN users u ON r.reviewer_id = u.id
+       WHERE r.application_id = ? ORDER BY r.updated_at DESC`,
+      [req.params.appId]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── REVIEWERS: give (or change) a 1-5 star rating on one applicant ───
+router.post('/:appId/rate', authMiddleware, reviewerMiddleware, async (req, res) => {
+  try {
+    const { stars, comment } = req.body;
+    const s = Number(stars);
+    if (!s || s < 1 || s > 5) return res.status(400).json({ error: 'Stars must be between 1 and 5' });
+
+    // If this reviewer is a foster, make sure the applicant is for one of THEIR pets.
+    if (req.user.role === 'foster') {
+      const [chk] = await db.query(
+        `SELECT aa.id FROM adoption_applications aa
+         JOIN pets p ON aa.pet_id = p.id
+         WHERE aa.id = ? AND p.fostered_by = ?`,
+        [req.params.appId, req.user.id]
+      );
+      if (chk.length === 0) return res.status(403).json({ error: 'Not your foster pet' });
+    }
+
+    const [ex] = await db.query(
+      'SELECT id FROM adoption_ratings WHERE application_id = ? AND reviewer_id = ?',
+      [req.params.appId, req.user.id]
+    );
+    if (ex.length) {
+      await db.query('UPDATE adoption_ratings SET stars = ?, comment = ? WHERE id = ?', [s, comment || null, ex[0].id]);
+    } else {
+      await db.query('INSERT INTO adoption_ratings (application_id, reviewer_id, stars, comment) VALUES (?,?,?,?)',
+        [req.params.appId, req.user.id, s, comment || null]);
+    }
+    res.json({ message: 'Rating saved' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── FOSTER: list the pets I foster (with a pending-applicant count) ───
+router.get('/foster/my-pets', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'foster') return res.status(403).json({ error: 'Fosters only' });
+    const [rows] = await db.query(
+      `SELECT p.*,
+        (SELECT COUNT(*) FROM adoption_applications aa WHERE aa.pet_id = p.id) AS applicant_count,
+        (SELECT COUNT(*) FROM adoption_applications aa WHERE aa.pet_id = p.id AND aa.status = 'Pending Review') AS pending_count
+       FROM pets p WHERE p.fostered_by = ? ORDER BY p.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

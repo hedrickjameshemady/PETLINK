@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../config/db');
-const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware, lostFoundMiddleware } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -58,7 +58,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── ADMIN: Get all reports (any status) ────────────────────────────────────
-router.get('/admin/all', authMiddleware, adminMiddleware, async (req, res) => {
+router.get('/admin/all', authMiddleware, lostFoundMiddleware, async (req, res) => {
   try {
     const { type, status } = req.query;
     let query = `
@@ -137,7 +137,7 @@ router.post('/', upload.single('photo'), async (req, res) => {
 });
 
 // ─── ADMIN: Post a surrendered pet directly ──────────────────────────────────
-router.post('/admin/post', authMiddleware, adminMiddleware, upload.single('photo'), async (req, res) => {
+router.post('/admin/post', authMiddleware, lostFoundMiddleware, upload.single('photo'), async (req, res) => {
   try {
     const {
       type, pet_type, pet_name, pet_description, last_seen_location,
@@ -174,7 +174,7 @@ router.post('/admin/post', authMiddleware, adminMiddleware, upload.single('photo
 });
 
 // ─── ADMIN: Approve a report ─────────────────────────────────────────────────
-router.patch('/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
+router.patch('/:id/approve', authMiddleware, lostFoundMiddleware, async (req, res) => {
   try {
     await db.query(
       `UPDATE lost_found_reports SET status = 'Approved', reviewed_by = ?, updated_at = NOW() WHERE id = ?`,
@@ -187,7 +187,7 @@ router.patch('/:id/approve', authMiddleware, adminMiddleware, async (req, res) =
 });
 
 // ─── ADMIN: Set any status on a report ───────────────────────────────────────
-router.patch('/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
+router.patch('/:id/status', authMiddleware, lostFoundMiddleware, async (req, res) => {
   try {
     const { status } = req.body;
     const allowed = ['Pending Review', 'Approved', 'Rejected', 'Reunited', 'Closed'];
@@ -203,7 +203,7 @@ router.patch('/:id/status', authMiddleware, adminMiddleware, async (req, res) =>
 });
 
 // ─── ADMIN: Mark as Reunited ─────────────────────────────────────────────────
-router.patch('/:id/reunite-admin', authMiddleware, adminMiddleware, async (req, res) => {
+router.patch('/:id/reunite-admin', authMiddleware, lostFoundMiddleware, async (req, res) => {
   try {
     await db.query(
       `UPDATE lost_found_reports SET status = 'Reunited', updated_at = NOW() WHERE id = ?`,
@@ -292,7 +292,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ─── ADMIN: Delete a report ───────────────────────────────────────────────────
-router.delete('/:id', authMiddleware, adminMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, lostFoundMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query('SELECT photo FROM lost_found_reports WHERE id = ?', [req.params.id]);
     if (rows.length && rows[0].photo) {
