@@ -45,8 +45,8 @@ router.get('/my', authMiddleware, async (req, res) => {
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const {
-      pet_id, living_situation, has_yard, other_pets, children_at_home,
-      experience_with_pets, reason_for_adoption, preferred_contact,
+      pet_id, has_yard, other_pets, children_at_home,
+      experience_with_pets, reason_for_adoption, preferred_contact, phone_number,
       housing_type, rent_or_own, landlord_allows_pets, household_size, family_agrees,
       allergies, previous_pets, current_pets_neutered, vet_info, hours_alone,
       who_cares_when_away, can_afford_care, if_you_move, lifetime_commitment, home_visit_ok
@@ -67,14 +67,14 @@ router.post('/', authMiddleware, async (req, res) => {
 
     const [result] = await db.query(
       `INSERT INTO adoption_applications
-        (application_id, applicant_id, pet_id, living_situation, has_yard, other_pets, children_at_home,
-         experience_with_pets, reason_for_adoption, preferred_contact,
+        (application_id, applicant_id, pet_id, has_yard, other_pets, children_at_home,
+         experience_with_pets, reason_for_adoption, preferred_contact, phone_number,
          housing_type, rent_or_own, landlord_allows_pets, household_size, family_agrees,
          allergies, previous_pets, current_pets_neutered, vet_info, hours_alone,
          who_cares_when_away, can_afford_care, if_you_move, lifetime_commitment, home_visit_ok)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [appId, req.user.id, pet_id, living_situation, has_yard, other_pets, children_at_home,
-       experience_with_pets, reason_for_adoption, preferred_contact,
+      [appId, req.user.id, pet_id, has_yard, other_pets || null, children_at_home || null,
+       experience_with_pets || null, reason_for_adoption, preferred_contact, phone_number || null,
        housing_type || null, rent_or_own || null, landlord_allows_pets || null, household_size || null, family_agrees || null,
        allergies || null, previous_pets || null, current_pets_neutered || null, vet_info || null, hours_alone || null,
        who_cares_when_away || null, can_afford_care || null, if_you_move || null, lifetime_commitment || null, home_visit_ok || null]
@@ -228,8 +228,8 @@ router.get('/pet/:petId/applicants', authMiddleware, reviewerMiddleware, async (
         u.email AS applicant_email,
         u.profile_photo AS applicant_photo,
         (SELECT ROUND(AVG(r.stars),2) FROM adoption_ratings r WHERE r.application_id = aa.id) AS avg_stars,
-        (SELECT COUNT(*)             FROM adoption_ratings r WHERE r.application_id = aa.id) AS rating_count,
-        (SELECT r.stars FROM adoption_ratings r WHERE r.application_id = aa.id AND r.reviewer_id = ?) AS my_stars
+        (SELECT COUNT(DISTINCT r.reviewer_id) FROM adoption_ratings r WHERE r.application_id = aa.id) AS rating_count,
+        (SELECT ROUND(AVG(r.stars),2) FROM adoption_ratings r WHERE r.application_id = aa.id AND r.reviewer_id = ?) AS my_stars
        FROM adoption_applications aa
        JOIN users u ON aa.applicant_id = u.id
        WHERE aa.pet_id = ?
@@ -240,25 +240,51 @@ router.get('/pet/:petId/applicants', authMiddleware, reviewerMiddleware, async (
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ─── REVIEWERS: all individual star ratings on ONE application (who gave what) ───
+// ─── REVIEWERS: per-criterion ratings on ONE application, grouped by reviewer ───
 router.get('/:appId/ratings', authMiddleware, reviewerMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT r.*, CONCAT(u.first_name,' ',u.last_name) AS reviewer_name, u.role AS reviewer_role
+      `SELECT r.criteria, r.stars, r.comment, r.reviewer_id,
+              CONCAT(u.first_name,' ',u.last_name) AS reviewer_name, u.role AS reviewer_role
        FROM adoption_ratings r JOIN users u ON r.reviewer_id = u.id
-       WHERE r.application_id = ? ORDER BY r.updated_at DESC`,
+       WHERE r.application_id = ?
+       ORDER BY reviewer_name ASC`,
       [req.params.appId]
     );
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ─── REVIEWERS: give (or change) a 1-5 star rating on one applicant ───
+// ─── REVIEWERS: just MY own per-criterion scores on one application ───
+router.get('/:appId/ratings/mine', authMiddleware, reviewerMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT criteria, stars, comment FROM adoption_ratings WHERE application_id = ? AND reviewer_id = ?',
+      [req.params.appId, req.user.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// The 7 criteria reviewers score. Keep this list in sync with the frontend.
+const RATING_CRITERIA = [
+  'housing_environment',
+  'financial_readiness',
+  'pet_experience',
+  'household_support',
+  'care_planning',
+  'long_term_commitment',
+  'verification_willingness',
+];
+
+// ─── REVIEWERS: save (or change) per-criterion 1-5 star ratings on one applicant ───
+// Body: { ratings: { housing_environment: 4, financial_readiness: 5, ... }, comment?: string }
 router.post('/:appId/rate', authMiddleware, reviewerMiddleware, async (req, res) => {
   try {
-    const { stars, comment } = req.body;
-    const s = Number(stars);
-    if (!s || s < 1 || s > 5) return res.status(400).json({ error: 'Stars must be between 1 and 5' });
+    const { ratings, comment } = req.body;
+    if (!ratings || typeof ratings !== 'object') {
+      return res.status(400).json({ error: 'ratings object is required' });
+    }
 
     // If this reviewer is a foster, make sure the applicant is for one of THEIR pets.
     if (req.user.role === 'foster') {
@@ -271,15 +297,23 @@ router.post('/:appId/rate', authMiddleware, reviewerMiddleware, async (req, res)
       if (chk.length === 0) return res.status(403).json({ error: 'Not your foster pet' });
     }
 
-    const [ex] = await db.query(
-      'SELECT id FROM adoption_ratings WHERE application_id = ? AND reviewer_id = ?',
-      [req.params.appId, req.user.id]
-    );
-    if (ex.length) {
-      await db.query('UPDATE adoption_ratings SET stars = ?, comment = ? WHERE id = ?', [s, comment || null, ex[0].id]);
-    } else {
-      await db.query('INSERT INTO adoption_ratings (application_id, reviewer_id, stars, comment) VALUES (?,?,?,?)',
-        [req.params.appId, req.user.id, s, comment || null]);
+    // Upsert one row per criterion. Skip any criterion the reviewer left unrated.
+    for (const key of RATING_CRITERIA) {
+      const s = Number(ratings[key]);
+      if (!s || s < 1 || s > 5) continue; // not rated yet — leave it out
+
+      const [ex] = await db.query(
+        'SELECT id FROM adoption_ratings WHERE application_id = ? AND reviewer_id = ? AND criteria = ?',
+        [req.params.appId, req.user.id, key]
+      );
+      if (ex.length) {
+        await db.query('UPDATE adoption_ratings SET stars = ?, comment = ? WHERE id = ?', [s, comment || null, ex[0].id]);
+      } else {
+        await db.query(
+          'INSERT INTO adoption_ratings (application_id, reviewer_id, criteria, stars, comment) VALUES (?,?,?,?,?)',
+          [req.params.appId, req.user.id, key, s, comment || null]
+        );
+      }
     }
     res.json({ message: 'Rating saved' });
   } catch (err) { res.status(500).json({ error: err.message }); }

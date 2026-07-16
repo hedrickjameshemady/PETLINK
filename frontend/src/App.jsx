@@ -21,7 +21,7 @@ import Donors from './pages/admin/Donors';
 import CommunityAndCampaigns from './pages/admin/CommunityAndCampaigns';
 import AdminLostAndFound from './pages/admin/AdminLostAndFound';
 import ManageAccounts from './pages/admin/ManageAccounts';
-import FosterApplicants from './pages/admin/FosterApplicants';
+import FosterApplicants from './pages/admin/FosterApplicants.jsx';
 
 import UserDashboard from './pages/user/UserDashboard';
 import Profile from './pages/Profile';

@@ -354,10 +354,10 @@ export default function Donate() {
                   </Field>
                 )}
 
-                <Field label="Details" hint="optional">
+                <Field label="Message" hint="optional">
                   <input
                     style={styles.input}
-                    placeholder="Details for donation (e.g. Medical fund, Food supply)"
+                    placeholder="Message for donation (e.g. Medical fund, Food supply)"
                     value={form.purpose}
                     onChange={e => setField('purpose', e.target.value)}
                   />

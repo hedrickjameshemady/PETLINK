@@ -8,11 +8,10 @@ import { fileUrl } from '../config';
 
 const EMPTY_FORM = {
   // Household & housing
-  living_situation: '',
   housing_type: '',
+  has_yard: false,
   rent_or_own: '',
   landlord_allows_pets: '',
-  has_yard: false,
   household_size: '',
   family_agrees: '',
   children_at_home: '',
@@ -31,7 +30,9 @@ const EMPTY_FORM = {
   lifetime_commitment: '',
   home_visit_ok: '',
   reason_for_adoption: '',
+  // Contact
   preferred_contact: 'Email',
+  phone_number: '',
 };
 
 export default function PetDetail() {
@@ -283,193 +284,236 @@ export default function PetDetail() {
                 <h2 className="modal-title">Adoption Application — {pet.name}</h2>
                 <button className="modal-close" onClick={closeModal}>✕</button>
               </div>
-              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
 
-                <div className="form-group">
-                  <label className="form-label">Living Situation</label>
-                  <select className="form-select" value={form.living_situation} onChange={e => setForm({...form, living_situation: e.target.value})} required>
-                    <option value="">Select...</option>
-                    <option>House with yard</option>
-                    <option>House without yard</option>
-                    <option>Apartment</option>
-                    <option>Condo</option>
-                  </select>
+                {/* ── Section: Home & Household ── */}
+                <div style={fstyles.section}>
+                  <div style={fstyles.sectionTitle}>🏠 Home &amp; Household</div>
+                  <p style={fstyles.sectionHint}>Fields marked <span style={fstyles.req}>*</span> are required.</p>
+
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">Housing type <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.housing_type} onChange={e => setForm({...form, housing_type: e.target.value, ...(e.target.value !== 'House' ? { has_yard: false } : {})})} required>
+                        <option value="">Select...</option>
+                        <option>House</option>
+                        <option>Apartment</option>
+                        <option>Condo</option>
+                        <option>Townhouse</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Do you rent or own? <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.rent_or_own} onChange={e => setForm({...form, rent_or_own: e.target.value, ...(e.target.value !== 'Rent' ? { landlord_allows_pets: '' } : {})})} required>
+                        <option value="">Select...</option>
+                        <option>Own</option>
+                        <option>Rent</option>
+                        <option>Living with family</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Yard — only relevant for a House */}
+                  {form.housing_type === 'House' && (
+                    <label style={fstyles.checkRow}>
+                      <input
+                        type="checkbox"
+                        checked={form.has_yard}
+                        onChange={e => setForm({...form, has_yard: e.target.checked})}
+                        style={{ width: 17, height: 17, cursor: 'pointer' }}
+                      />
+                      <span>My house has a yard / outdoor space</span>
+                    </label>
+                  )}
+
+                  {/* Landlord — only when renting */}
+                  {form.rent_or_own === 'Rent' && (
+                    <div className="form-group" style={{ marginTop: 4 }}>
+                      <label className="form-label">Does your landlord allow pets? <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.landlord_allows_pets} onChange={e => setForm({...form, landlord_allows_pets: e.target.value})} required>
+                        <option value="">Select...</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                        <option>Not sure</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">People in household <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.household_size} onChange={e => setForm({...form, household_size: e.target.value})} required>
+                        <option value="">Select...</option>
+                        <option>Just me</option>
+                        <option>2-3</option>
+                        <option>4-5</option>
+                        <option>6+</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Everyone agrees to adopt? <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.family_agrees} onChange={e => setForm({...form, family_agrees: e.target.value})} required>
+                        <option value="">Select...</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                        <option>Some do</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">Children at home <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.children_at_home} onChange={e => setForm({...form, children_at_home: e.target.value})}>
+                        <option value="">Select...</option>
+                        <option>None</option>
+                        <option>Infants (0-2)</option>
+                        <option>Young children (3-10)</option>
+                        <option>Teens (11-17)</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Pet allergies in home? <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.allergies} onChange={e => setForm({...form, allergies: e.target.value})}>
+                        <option value="">Select...</option>
+                        <option>No</option>
+                        <option>Yes</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Do you have a yard?</label>
-                  <select className="form-select" value={form.has_yard} onChange={e => setForm({...form, has_yard: e.target.value === 'true'})}>
-                    <option value="false">No</option>
-                    <option value="true">Yes</option>
-                  </select>
+                {/* ── Section: Pet Experience ── */}
+                <div style={fstyles.section}>
+                  <div style={fstyles.sectionTitle}>🐾 Pet Experience</div>
+
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">Other pets at home <span style={fstyles.opt}>(optional)</span></label>
+                      <input className="form-input" placeholder="E.g. 1 dog, 2 cats or None" value={form.other_pets} onChange={e => setForm({...form, other_pets: e.target.value})} />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Current pets spayed/neutered? <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.current_pets_neutered} onChange={e => setForm({...form, current_pets_neutered: e.target.value})}>
+                        <option value="">Select / No other pets</option>
+                        <option>Yes, all of them</option>
+                        <option>Some of them</option>
+                        <option>No</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Previous pets you've owned <span style={fstyles.opt}>(optional)</span></label>
+                    <textarea className="form-textarea" placeholder="What pets have you had, and what happened to them?" value={form.previous_pets} onChange={e => setForm({...form, previous_pets: e.target.value})} />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Your veterinarian (name / clinic) <span style={fstyles.opt}>(optional)</span></label>
+                    <input className="form-input" placeholder="Vet or clinic name (if any)" value={form.vet_info} onChange={e => setForm({...form, vet_info: e.target.value})} />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Experience with pets <span style={fstyles.opt}>(optional)</span></label>
+                    <textarea className="form-textarea" placeholder="Describe your experience..." value={form.experience_with_pets} onChange={e => setForm({...form, experience_with_pets: e.target.value})} />
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Housing type</label>
-                  <select className="form-select" value={form.housing_type} onChange={e => setForm({...form, housing_type: e.target.value})} required>
-                    <option value="">Select...</option>
-                    <option>House</option>
-                    <option>Apartment</option>
-                    <option>Condo</option>
-                    <option>Townhouse</option>
-                    <option>Other</option>
-                  </select>
+                {/* ── Section: Care & Commitment ── */}
+                <div style={fstyles.section}>
+                  <div style={fstyles.sectionTitle}>💚 Care &amp; Commitment</div>
+
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">Hours pet left alone / day <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.hours_alone} onChange={e => setForm({...form, hours_alone: e.target.value})} required>
+                        <option value="">Select...</option>
+                        <option>Rarely alone</option>
+                        <option>1-4 hours</option>
+                        <option>5-8 hours</option>
+                        <option>More than 8 hours</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Can you afford care? <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.can_afford_care} onChange={e => setForm({...form, can_afford_care: e.target.value})} required>
+                        <option value="">Select...</option>
+                        <option>Yes</option>
+                        <option>Not sure</option>
+                        <option>No</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Who cares for the pet when you're away? <span style={fstyles.opt}>(optional)</span></label>
+                    <textarea className="form-textarea" placeholder="E.g. family member, pet sitter, boarding..." value={form.who_cares_when_away} onChange={e => setForm({...form, who_cares_when_away: e.target.value})} />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">What would you do with the pet if you move? <span style={fstyles.opt}>(optional)</span></label>
+                    <textarea className="form-textarea" placeholder="Explain your plan..." value={form.if_you_move} onChange={e => setForm({...form, if_you_move: e.target.value})} />
+                  </div>
+
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">Commit for the pet's whole life? <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.lifetime_commitment} onChange={e => setForm({...form, lifetime_commitment: e.target.value})} required>
+                        <option value="">Select...</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">OK with a home visit? <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.home_visit_ok} onChange={e => setForm({...form, home_visit_ok: e.target.value})}>
+                        <option value="">Select...</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Why do you want to adopt {pet.name}? <span style={fstyles.req}>*</span></label>
+                    <textarea className="form-textarea" placeholder="Tell us why you'd be a great match..." value={form.reason_for_adoption} onChange={e => setForm({...form, reason_for_adoption: e.target.value})} required />
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Do you rent or own your home?</label>
-                  <select className="form-select" value={form.rent_or_own} onChange={e => setForm({...form, rent_or_own: e.target.value})} required>
-                    <option value="">Select...</option>
-                    <option>Own</option>
-                    <option>Rent</option>
-                    <option>Living with family</option>
-                  </select>
+                {/* ── Section: Contact ── */}
+                <div style={fstyles.section}>
+                  <div style={fstyles.sectionTitle}>📬 How should we reach you?</div>
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">Preferred contact method <span style={fstyles.req}>*</span></label>
+                      <select className="form-select" value={form.preferred_contact} onChange={e => setForm({...form, preferred_contact: e.target.value, ...(e.target.value !== 'Phone' ? { phone_number: '' } : {})})}>
+                        <option>Email</option>
+                        <option>Phone</option>
+                      </select>
+                    </div>
+
+                    {form.preferred_contact === 'Phone' ? (
+                      <div className="form-group">
+                        <label className="form-label">Phone number <span style={fstyles.req}>*</span></label>
+                        <input className="form-input" type="tel" placeholder="e.g. 0917 123 4567" value={form.phone_number} onChange={e => setForm({...form, phone_number: e.target.value})} required />
+                      </div>
+                    ) : (
+                      <div className="form-group">
+                        <label className="form-label">Your email</label>
+                        <input className="form-input" value={user?.email || ''} disabled style={{ background: '#f3f4f6', color: 'var(--text-muted)' }} />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">If renting, does your landlord allow pets?</label>
-                  <select className="form-select" value={form.landlord_allows_pets} onChange={e => setForm({...form, landlord_allows_pets: e.target.value})}>
-                    <option value="">Select / Not applicable</option>
-                    <option>Yes</option>
-                    <option>No</option>
-                    <option>Not sure</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">How many people live in your household?</label>
-                  <select className="form-select" value={form.household_size} onChange={e => setForm({...form, household_size: e.target.value})} required>
-                    <option value="">Select...</option>
-                    <option>Just me</option>
-                    <option>2-3</option>
-                    <option>4-5</option>
-                    <option>6+</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Does everyone in the household agree to adopt?</label>
-                  <select className="form-select" value={form.family_agrees} onChange={e => setForm({...form, family_agrees: e.target.value})} required>
-                    <option value="">Select...</option>
-                    <option>Yes</option>
-                    <option>No</option>
-                    <option>Some do</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Children at home</label>
-                  <select className="form-select" value={form.children_at_home} onChange={e => setForm({...form, children_at_home: e.target.value})}>
-                    <option value="">Select...</option>
-                    <option>None</option>
-                    <option>Infants (0-2)</option>
-                    <option>Young children (3-10)</option>
-                    <option>Teens (11-17)</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Anyone in the home with pet allergies?</label>
-                  <select className="form-select" value={form.allergies} onChange={e => setForm({...form, allergies: e.target.value})}>
-                    <option value="">Select...</option>
-                    <option>No</option>
-                    <option>Yes</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Other pets at home</label>
-                  <input className="form-input" placeholder="E.g. 1 dog, 2 cats or None" value={form.other_pets} onChange={e => setForm({...form, other_pets: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Are your current pets spayed/neutered?</label>
-                  <select className="form-select" value={form.current_pets_neutered} onChange={e => setForm({...form, current_pets_neutered: e.target.value})}>
-                    <option value="">Select / No other pets</option>
-                    <option>Yes, all of them</option>
-                    <option>Some of them</option>
-                    <option>No</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Previous pets you've owned</label>
-                  <textarea className="form-textarea" placeholder="What pets have you had, and what happened to them?" value={form.previous_pets} onChange={e => setForm({...form, previous_pets: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Your veterinarian (name / clinic)</label>
-                  <input className="form-input" placeholder="Vet or clinic name (if any)" value={form.vet_info} onChange={e => setForm({...form, vet_info: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Experience with pets</label>
-                  <textarea className="form-textarea" placeholder="Describe your experience..." value={form.experience_with_pets} onChange={e => setForm({...form, experience_with_pets: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">How many hours a day will the pet be left alone?</label>
-                  <select className="form-select" value={form.hours_alone} onChange={e => setForm({...form, hours_alone: e.target.value})} required>
-                    <option value="">Select...</option>
-                    <option>Rarely alone</option>
-                    <option>1-4 hours</option>
-                    <option>5-8 hours</option>
-                    <option>More than 8 hours</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Who will care for the pet when you're away/travelling?</label>
-                  <textarea className="form-textarea" placeholder="E.g. family member, pet sitter, boarding..." value={form.who_cares_when_away} onChange={e => setForm({...form, who_cares_when_away: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Can you afford food, grooming, and medical care?</label>
-                  <select className="form-select" value={form.can_afford_care} onChange={e => setForm({...form, can_afford_care: e.target.value})} required>
-                    <option value="">Select...</option>
-                    <option>Yes</option>
-                    <option>Not sure</option>
-                    <option>No</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">What would you do with the pet if you move?</label>
-                  <textarea className="form-textarea" placeholder="Explain your plan..." value={form.if_you_move} onChange={e => setForm({...form, if_you_move: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Do you commit to caring for this pet for its whole life?</label>
-                  <select className="form-select" value={form.lifetime_commitment} onChange={e => setForm({...form, lifetime_commitment: e.target.value})} required>
-                    <option value="">Select...</option>
-                    <option>Yes</option>
-                    <option>No</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Are you okay with a home visit before approval?</label>
-                  <select className="form-select" value={form.home_visit_ok} onChange={e => setForm({...form, home_visit_ok: e.target.value})}>
-                    <option value="">Select...</option>
-                    <option>Yes</option>
-                    <option>No</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Why do you want to adopt {pet.name}?</label>
-                  <textarea className="form-textarea" placeholder="Tell us why you'd be a great match..." value={form.reason_for_adoption} onChange={e => setForm({...form, reason_for_adoption: e.target.value})} required />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Preferred Contact Method</label>
-                  <select className="form-select" value={form.preferred_contact} onChange={e => setForm({...form, preferred_contact: e.target.value})}>
-                    <option>Email</option>
-                    <option>Phone</option>
-                  </select>
-                </div>
-
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
                   <button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button>
                   <button type="submit" className="btn btn-primary" disabled={submitting}>
                     {submitting ? 'Submitting...' : 'Submit Application'}
@@ -539,4 +583,15 @@ const styles = {
   assessSubLabel: { fontWeight: 700, fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' },
   assessText: { fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.7, margin: '6px 0 0 0' },
   assessEmpty: { background: '#f9fafb', border: '1.5px dashed #d1d5db', borderRadius: 14, padding: '40px 28px', textAlign: 'center' },
+};
+
+// Styles for the grouped adoption form
+const fstyles = {
+  section: { border: '1.5px solid var(--border)', borderRadius: 12, padding: '16px 18px', background: '#fcfcfc', display: 'flex', flexDirection: 'column', gap: 14 },
+  sectionTitle: { fontWeight: 700, fontSize: 15, color: 'var(--text-dark)' },
+  sectionHint: { fontSize: 12, color: 'var(--text-muted)', margin: '-8px 0 0 0' },
+  row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
+  checkRow: { display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-dark)', cursor: 'pointer', padding: '2px 0' },
+  req: { color: '#dc2626', fontWeight: 700 },
+  opt: { color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 },
 };
