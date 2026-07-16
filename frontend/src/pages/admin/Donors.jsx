@@ -130,7 +130,7 @@ export default function Donors() {
       />
     ) : (
       <div style={{ width: 36, height: 36, background: bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)', flexShrink: 0 }}>
-        {(name || '?')[0].toUpperCase()}
+        {name ? name[0].toUpperCase() : ''}
       </div>
     )
   );
@@ -238,7 +238,7 @@ export default function Donors() {
               {kindFilter === 'Monetary' ? (
                 <tr>
                   <th>NAME / EMAIL</th><th>AMOUNT</th><th>METHOD</th>
-                  <th>DATE</th><th>PROOF</th><th></th>
+                  <th>DATE</th><th>RECEIPT</th><th></th>
                 </tr>
               ) : (
                 <tr>
@@ -278,7 +278,7 @@ export default function Donors() {
                           <button
                             onClick={() => setProofView(d)}
                             style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
-                          >View Proof</button>
+                          >Receipt</button>
                         ) : (
                           <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>
                         )}
@@ -320,7 +320,7 @@ export default function Donors() {
           <div style={{ maxWidth: 560, width: '92%', background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid var(--border)' }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>Proof of Payment</div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>Receipt</div>
                 <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
                   {proofView.donor_name || 'Anonymous'} · ₱{Number(proofView.amount ?? 0).toLocaleString()}
                 </div>
@@ -336,12 +336,12 @@ export default function Donors() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 18px' }}>
               
-                href={`http://localhost:5000${proofView.proof_file}`}
+               <a href={`http://localhost:5000${proofView.proof_file}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-outline btn-sm"
                 style={{ textDecoration: 'none' }}
-              <a>Open full size</a>
+              >Open full size</a>
               <button className="btn btn-primary btn-sm" onClick={() => setProofView(null)}>Close</button>
             </div>
           </div>

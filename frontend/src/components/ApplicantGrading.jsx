@@ -29,12 +29,12 @@ function StarPicker({ value, onRate, size = 20, readOnly = false }) {
 // The 7 scoring criteria — keys MUST match RATING_CRITERIA in backend/src/routes/adoptions.js
 const CRITERIA = [
   { key: 'housing_environment',      label: 'Housing & Environment',    fields: ['housing_type', 'has_yard', 'rent_or_own', 'landlord_allows_pets'] },
-  { key: 'financial_readiness',      label: 'Financial Readiness',      fields: ['can_afford_care'] },
+  { key: 'financial_readiness',      label: 'Financial Readiness',      fields: ['can_afford_care', 'employment_status', 'monthly_pet_budget', 'emergency_vet_plan'] },
   { key: 'pet_experience',           label: 'Pet Experience',           fields: ['other_pets', 'current_pets_neutered', 'previous_pets', 'vet_info', 'experience_with_pets'] },
   { key: 'household_support',        label: 'Household Support',        fields: ['household_size', 'family_agrees', 'children_at_home', 'allergies'] },
   { key: 'care_planning',            label: 'Care Planning',            fields: ['hours_alone', 'who_cares_when_away', 'if_you_move'] },
   { key: 'long_term_commitment',     label: 'Long-term Commitment',     fields: ['lifetime_commitment', 'reason_for_adoption'] },
-  { key: 'verification_willingness', label: 'Verification Willingness', fields: ['home_visit_ok'] },
+  { key: 'verification_willingness', label: 'Verification Willingness', fields: ['willing_valid_id', 'willing_home_photos', 'willing_interview', 'reference_contact'] },
 ];
 
 const FIELD_LABELS = {
@@ -54,10 +54,16 @@ const FIELD_LABELS = {
   hours_alone: 'Hours Pet Left Alone',
   who_cares_when_away: 'Care When Away',
   can_afford_care: 'Can Afford Care',
+  employment_status: 'Employment / Income Source',
+  monthly_pet_budget: 'Monthly Pet Budget',
+  emergency_vet_plan: 'Emergency Vet Plan',
   if_you_move: 'If They Move',
   lifetime_commitment: 'Lifetime Commitment',
   reason_for_adoption: 'Reason for Adoption',
-  home_visit_ok: 'Home Visit OK',
+  willing_valid_id: 'Willing: Valid ID',
+  willing_home_photos: 'Willing: Home Photos',
+  willing_interview: 'Willing: Interview',
+  reference_contact: 'Reference Contact',
   preferred_contact: 'Preferred Contact',
   phone_number: 'Phone Number',
 };

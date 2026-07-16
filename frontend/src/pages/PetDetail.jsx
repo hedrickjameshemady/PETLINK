@@ -26,9 +26,15 @@ const EMPTY_FORM = {
   hours_alone: '',
   who_cares_when_away: '',
   can_afford_care: '',
+  employment_status: '',
+  monthly_pet_budget: '',
+  emergency_vet_plan: '',
   if_you_move: '',
   lifetime_commitment: '',
-  home_visit_ok: '',
+  willing_valid_id: '',
+  willing_home_photos: '',
+  willing_interview: '',
+  reference_contact: '',
   reason_for_adoption: '',
   // Contact
   preferred_contact: 'Email',
@@ -451,6 +457,44 @@ export default function PetDetail() {
                     </div>
                   </div>
 
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">Employment / income source <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.employment_status} onChange={e => setForm({...form, employment_status: e.target.value})}>
+                        <option value="">Select...</option>
+                        <option>Employed full-time</option>
+                        <option>Employed part-time</option>
+                        <option>Self-employed</option>
+                        <option>Student</option>
+                        <option>Retired</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Monthly budget set aside for the pet <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.monthly_pet_budget} onChange={e => setForm({...form, monthly_pet_budget: e.target.value})}>
+                        <option value="">Select...</option>
+                        <option>Under ₱1,000</option>
+                        <option>₱1,000–3,000</option>
+                        <option>₱3,000–5,000</option>
+                        <option>More than ₱5,000</option>
+                        <option>Not sure yet</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">If your pet had a sudden ₱10,000+ medical emergency, how would you handle it? <span style={fstyles.opt}>(optional)</span></label>
+                    <select className="form-select" value={form.emergency_vet_plan} onChange={e => setForm({...form, emergency_vet_plan: e.target.value})}>
+                      <option value="">Select...</option>
+                      <option>I have savings for this</option>
+                      <option>I'd use a credit card or loan</option>
+                      <option>I'd need time to gather funds</option>
+                      <option>I'm not sure</option>
+                    </select>
+                  </div>
+
                   <div className="form-group">
                     <label className="form-label">Who cares for the pet when you're away? <span style={fstyles.opt}>(optional)</span></label>
                     <textarea className="form-textarea" placeholder="E.g. family member, pet sitter, boarding..." value={form.who_cares_when_away} onChange={e => setForm({...form, who_cares_when_away: e.target.value})} />
@@ -472,13 +516,38 @@ export default function PetDetail() {
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">OK with a home visit? <span style={fstyles.opt}>(optional)</span></label>
-                      <select className="form-select" value={form.home_visit_ok} onChange={e => setForm({...form, home_visit_ok: e.target.value})}>
+                      <label className="form-label">Willing to provide a valid ID? <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.willing_valid_id} onChange={e => setForm({...form, willing_valid_id: e.target.value})}>
                         <option value="">Select...</option>
                         <option>Yes</option>
                         <option>No</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div style={fstyles.row2}>
+                    <div className="form-group">
+                      <label className="form-label">Willing to share home photos? <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.willing_home_photos} onChange={e => setForm({...form, willing_home_photos: e.target.value})}>
+                        <option value="">Select...</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Willing to do a short interview (call/video)? <span style={fstyles.opt}>(optional)</span></label>
+                      <select className="form-select" value={form.willing_interview} onChange={e => setForm({...form, willing_interview: e.target.value})}>
+                        <option value="">Select...</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Reference contact <span style={fstyles.opt}>(optional)</span></label>
+                    <input className="form-input" placeholder="Name & number of someone who can vouch for you (vet, landlord, or friend)" value={form.reference_contact} onChange={e => setForm({...form, reference_contact: e.target.value})} />
                   </div>
 
                   <div className="form-group">

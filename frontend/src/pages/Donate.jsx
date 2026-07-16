@@ -21,6 +21,7 @@ export default function Donate() {
     donor_name: '',
     type: '',
     amount: '',
+    payment_method: 'GCash',
     purpose: '',
     campaign_id: lockedCampaignId,
     // non-monetary
@@ -145,6 +146,7 @@ export default function Donate() {
 
       if (kind === 'Monetary') {
         fd.append('amount', form.amount);
+        fd.append('payment_method', form.payment_method);
         fd.append('contact_phone', form.contact_phone.trim());
       } else {
         fd.append('item_category', form.item_category);
@@ -334,6 +336,17 @@ export default function Donate() {
                   <span style={styles.hint}>We'll use this to send your thank-you message.</span>
                 </Field>
 
+                <Field label="Payment Method" required>
+                  <select
+                    style={styles.input}
+                    value={form.payment_method}
+                    onChange={e => setField('payment_method', e.target.value)}
+                  >
+                    <option>GCash</option>
+                    <option>Bank Transfer</option>
+                  </select>
+                </Field>
+
                 {lockedCampaignId ? (
                   <Field label="Donating to Campaign">
                     <div style={{ ...styles.input, background: '#f6f8fa', display: 'flex', alignItems: 'center', color: 'var(--text-dark)', fontWeight: 600 }}>
@@ -342,13 +355,13 @@ export default function Donate() {
                     <span style={styles.hint}>This donation goes directly to this campaign and can't be changed here.</span>
                   </Field>
                 ) : campaigns.length > 0 && (
-                  <Field label="Donate to a Campaign" hint="optional">
+                  <Field label="Donate to:" hint="optional">
                     <select
                       style={styles.input}
                       value={form.campaign_id}
                       onChange={e => setField('campaign_id', e.target.value)}
                     >
-                      <option value="">— General Donation —</option>
+                      <option value="">— Select a campaign —</option>
                       {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                     </select>
                   </Field>

@@ -325,7 +325,7 @@ router.post('/donations', uploadProof.single('proof'), async (req, res) => {
   try {
     const {
       donor_id, donor_name, donor_email, donor_phone, type, purpose, message, campaign_id,
-      donation_kind, amount,
+      donation_kind, amount, payment_method,
       item_category, item_description, item_quantity,
       handoff_method, pickup_address, pickup_date,
       courier_name, tracking_number, contact_phone,
@@ -369,14 +369,14 @@ router.post('/donations', uploadProof.single('proof'), async (req, res) => {
 
     const [result] = await db.query(
       `INSERT INTO donations
-        (donor_id, donor_name, donor_email, donor_phone, type, donation_kind, amount,
+        (donor_id, donor_name, donor_email, donor_phone, type, donation_kind, amount, payment_method,
          item_category, item_description, item_quantity, handoff_method, pickup_address,
          pickup_date, courier_name, tracking_number, contact_phone,
          purpose, message, campaign_id, proof_file)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         donor_id || null, donor_name || null, donor_email || null, donor_phone || null,
-        type || 'Individual', kind, amt,
+        type || 'Individual', kind, amt, kind === 'Monetary' ? (payment_method || 'GCash') : null,
         item_category || null, item_description || null, item_quantity || null,
         handoff_method || null, pickup_address || null,
         pickup_date || null, courier_name || null, tracking_number || null, contact_phone || null,

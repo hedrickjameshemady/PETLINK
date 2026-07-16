@@ -49,7 +49,9 @@ router.post('/', authMiddleware, async (req, res) => {
       experience_with_pets, reason_for_adoption, preferred_contact, phone_number,
       housing_type, rent_or_own, landlord_allows_pets, household_size, family_agrees,
       allergies, previous_pets, current_pets_neutered, vet_info, hours_alone,
-      who_cares_when_away, can_afford_care, if_you_move, lifetime_commitment, home_visit_ok
+      who_cares_when_away, can_afford_care, if_you_move, lifetime_commitment,
+      employment_status, monthly_pet_budget, emergency_vet_plan,
+      willing_valid_id, willing_home_photos, willing_interview, reference_contact
     } = req.body;
 
     // Prevent duplicate active applications from the same user for the same pet
@@ -71,13 +73,17 @@ router.post('/', authMiddleware, async (req, res) => {
          experience_with_pets, reason_for_adoption, preferred_contact, phone_number,
          housing_type, rent_or_own, landlord_allows_pets, household_size, family_agrees,
          allergies, previous_pets, current_pets_neutered, vet_info, hours_alone,
-         who_cares_when_away, can_afford_care, if_you_move, lifetime_commitment, home_visit_ok)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         who_cares_when_away, can_afford_care, if_you_move, lifetime_commitment,
+         employment_status, monthly_pet_budget, emergency_vet_plan,
+         willing_valid_id, willing_home_photos, willing_interview, reference_contact)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [appId, req.user.id, pet_id, has_yard, other_pets || null, children_at_home || null,
        experience_with_pets || null, reason_for_adoption, preferred_contact, phone_number || null,
        housing_type || null, rent_or_own || null, landlord_allows_pets || null, household_size || null, family_agrees || null,
        allergies || null, previous_pets || null, current_pets_neutered || null, vet_info || null, hours_alone || null,
-       who_cares_when_away || null, can_afford_care || null, if_you_move || null, lifetime_commitment || null, home_visit_ok || null]
+       who_cares_when_away || null, can_afford_care || null, if_you_move || null, lifetime_commitment || null,
+       employment_status || null, monthly_pet_budget || null, emergency_vet_plan || null,
+       willing_valid_id || null, willing_home_photos || null, willing_interview || null, reference_contact || null]
     );
 
     // NOTE: We do NOT change the pet's global status here.
