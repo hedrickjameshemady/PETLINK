@@ -14,14 +14,30 @@ export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    first_name: '', last_name: '', email: '', phone: '', password: ''
+    first_name: '', last_name: '', email: '', phone: '',
+    address: '', city: '', province: '', password: ''
   });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
+
+  const validate = () => {
+    const fe = {};
+    if (!form.first_name.trim()) fe.first_name = 'First name is required.';
+    if (!form.last_name.trim()) fe.last_name = 'Last name is required.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) fe.email = 'Enter a valid email address.';
+    if (form.phone && !/^[0-9+\-\s()]{7,15}$/.test(form.phone.trim())) fe.phone = 'Enter a valid phone number.';
+    if (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password)) {
+      fe.password = 'Password must be at least 8 characters with letters and numbers.';
+    }
+    setFieldErrors(fe);
+    return Object.keys(fe).length === 0;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (!validate()) return;
     try {
       setLoading(true);
       await register(form);
@@ -46,6 +62,7 @@ export default function Register() {
 
       {/* Card */}
       <div style={s.card}>
+        <Link to="/" style={s.backBtn}>← Back to Home</Link>
         <img src={logo} style={s.logo} alt="PetLink" />
         <h2 style={s.title}>Join PetLink!</h2>
 
@@ -61,8 +78,8 @@ export default function Register() {
                 placeholder="e.g John"
                 value={form.first_name}
                 onChange={e => setForm({ ...form, first_name: e.target.value })}
-                required
               />
+              {fieldErrors.first_name && <span style={s.fieldErr}>{fieldErrors.first_name}</span>}
             </div>
             <div style={{ ...s.group, flex: 1 }}>
               <label style={s.label}>Last Name</label>
@@ -72,8 +89,8 @@ export default function Register() {
                 placeholder="e.g Liam"
                 value={form.last_name}
                 onChange={e => setForm({ ...form, last_name: e.target.value })}
-                required
               />
+              {fieldErrors.last_name && <span style={s.fieldErr}>{fieldErrors.last_name}</span>}
             </div>
           </div>
 
@@ -85,8 +102,8 @@ export default function Register() {
               placeholder="John@gmail.com"
               value={form.email}
               onChange={e => setForm({ ...form, email: e.target.value })}
-              required
             />
+            {fieldErrors.email && <span style={s.fieldErr}>{fieldErrors.email}</span>}
           </div>
 
           <div style={s.group}>
@@ -98,6 +115,41 @@ export default function Register() {
               value={form.phone}
               onChange={e => setForm({ ...form, phone: e.target.value })}
             />
+            {fieldErrors.phone && <span style={s.fieldErr}>{fieldErrors.phone}</span>}
+          </div>
+
+          <div style={s.group}>
+            <label style={s.label}>Address</label>
+            <input
+              style={s.input}
+              type="text"
+              placeholder="House no., street, barangay"
+              value={form.address}
+              onChange={e => setForm({ ...form, address: e.target.value })}
+            />
+          </div>
+
+          <div style={s.row}>
+            <div style={{ ...s.group, flex: 1 }}>
+              <label style={s.label}>City</label>
+              <input
+                style={s.input}
+                type="text"
+                placeholder="e.g Daet"
+                value={form.city}
+                onChange={e => setForm({ ...form, city: e.target.value })}
+              />
+            </div>
+            <div style={{ ...s.group, flex: 1 }}>
+              <label style={s.label}>Province</label>
+              <input
+                style={s.input}
+                type="text"
+                placeholder="e.g Camarines Norte"
+                value={form.province}
+                onChange={e => setForm({ ...form, province: e.target.value })}
+              />
+            </div>
           </div>
 
           <div style={s.group}>
@@ -111,6 +163,7 @@ export default function Register() {
               required
             />
             <span style={s.hint}>Password must at least 8 characters with letters and numbers</span>
+            {fieldErrors.password && <span style={s.fieldErr}>{fieldErrors.password}</span>}
           </div>
 
           <button type="submit" style={s.btn} disabled={loading}>
@@ -191,6 +244,8 @@ const s = {
     boxSizing: 'border-box',
   },
   hint: { fontSize: 12, color: '#2d6a4f', marginTop: 2 },
+  fieldErr: { fontSize: 12, color: '#dc2626', marginTop: 2 },
+  backBtn: { position: 'absolute', top: -40, left: 20, fontSize: 14, color: '#2d6a4f', fontWeight: 600, textDecoration: 'none', zIndex: 2 },
 
   btn: {
     marginTop: 8,

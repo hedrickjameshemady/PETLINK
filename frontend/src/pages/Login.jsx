@@ -47,6 +47,7 @@ export default function Login() {
 
       {/* Card */}
       <div style={s.card}>
+        <Link to="/" style={s.backBtn}>← Back to Home</Link>
         <img src={logo} style={s.logo} alt="PetLink" />
         <h2 style={s.title}>Sign in your PetLink Account!</h2>
 
@@ -189,4 +190,5 @@ const s = {
 
   switchText: { fontSize: 14, color: '#555', textAlign: 'center' },
   link: { color: '#2d6a4f', fontWeight: 600, textDecoration: 'none' },
+  backBtn: { position: 'absolute', top: -40, left: 20, fontSize: 14, color: '#2d6a4f', fontWeight: 600, textDecoration: 'none', zIndex: 2 },
 };

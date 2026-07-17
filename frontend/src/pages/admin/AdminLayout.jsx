@@ -54,6 +54,23 @@ export default function AdminLayout() {
     return () => clearInterval(t);          // stop the timer when leaving the page
   }, []);
 
+  // Notification dropdown: two lists — unread message threads and pending applications.
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifTab, setNotifTab] = useState('messages');
+  const [msgThreads, setMsgThreads] = useState([]);
+  const [pendingApps, setPendingApps] = useState([]);
+  useEffect(() => {
+    if (!notifOpen) return;
+    API.get('/messages/threads')
+      .then(({ data }) => setMsgThreads((data || []).filter(t => t.unread > 0)))
+      .catch(() => setMsgThreads([]));
+    API.get('/dashboard-detail')
+      .then(({ data }) => setPendingApps(data.pendingApplications || []))
+      .catch(() => setPendingApps([]));
+  }, [notifOpen]);
+
+  const totalNotif = pendingCount + msgUnread;
+
   const isActive = (path) => path === '/admin'
     ? location.pathname === '/admin'
     : location.pathname.startsWith(path);
@@ -147,12 +164,78 @@ export default function AdminLayout() {
               <span style={{ color: 'var(--text-muted)', fontSize: 16 }}>🔍</span>
               <input placeholder="Search..." style={styles.searchInput} />
             </div>
-            <button style={styles.notifBtn}>
-              🔔
-              {pendingCount > 0 && (
-                <span style={styles.notifBadge}>{pendingCount}</span>
+            <div style={{ position: 'relative' }}>
+              <button style={styles.notifBtn} onClick={() => setNotifOpen(o => !o)}>
+                🔔
+                {totalNotif > 0 && (
+                  <span style={styles.notifBadge}>{totalNotif}</span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <>
+                  <div
+                    onClick={() => setNotifOpen(false)}
+                    style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                  />
+                  <div style={styles.notifPanel}>
+                    <div style={styles.notifTabs}>
+                      <button
+                        onClick={() => setNotifTab('messages')}
+                        style={{ ...styles.notifTab, ...(notifTab === 'messages' ? styles.notifTabActive : {}) }}
+                      >
+                        Messages {msgUnread > 0 && `(${msgUnread})`}
+                      </button>
+                      <button
+                        onClick={() => setNotifTab('other')}
+                        style={{ ...styles.notifTab, ...(notifTab === 'other' ? styles.notifTabActive : {}) }}
+                      >
+                        Other {pendingCount > 0 && `(${pendingCount})`}
+                      </button>
+                    </div>
+
+                    <div style={styles.notifList}>
+                      {notifTab === 'messages' ? (
+                        msgThreads.length === 0 ? (
+                          <div style={styles.notifEmpty}>No unread messages.</div>
+                        ) : msgThreads.map(t => (
+                          <div
+                            key={t.thread_user_id}
+                            style={styles.notifItem}
+                            onClick={() => { setNotifOpen(false); navigate('/admin/messages'); }}
+                          >
+                            <div style={{ fontWeight: 600, fontSize: 13.5 }}>{`${t.first_name || ''} ${t.last_name || ''}`.trim() || t.email || 'User'}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                              {t.unread} unread message{t.unread > 1 ? 's' : ''}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        pendingApps.length === 0 ? (
+                          <div style={styles.notifEmpty}>No pending applications.</div>
+                        ) : pendingApps.map(a => (
+                          <div
+                            key={`${a.app_type}-${a.id}`}
+                            style={styles.notifItem}
+                            onClick={() => {
+                              setNotifOpen(false);
+                              navigate(a.app_type === 'Volunteer' ? '/admin/volunteers' : '/admin/pets');
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, fontSize: 13.5 }}>{a.applicant_name}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                              {a.app_type === 'Volunteer'
+                                ? `Volunteer application${a.preferred_role ? ` · ${a.preferred_role}` : ''}`
+                                : `Wants to adopt ${a.pet_name || 'a pet'}`}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
-            </button>
+            </div>
           </div>
         </header>
 
@@ -245,5 +328,12 @@ const styles = {
   searchInput: { background: 'none', border: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 14, width: 200, color: 'var(--text-dark)' },
   notifBtn: { position: 'relative', background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' },
   notifBadge: { position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', borderRadius: '50%', width: 16, height: 16, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 },
+  notifPanel: { position: 'absolute', top: 34, right: 0, width: 320, background: 'white', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-md)', zIndex: 50, overflow: 'hidden' },
+  notifTabs: { display: 'flex', borderBottom: '1px solid var(--border)' },
+  notifTab: { flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' },
+  notifTabActive: { color: 'var(--primary)', borderBottom: '2px solid var(--primary)' },
+  notifList: { maxHeight: 320, overflowY: 'auto' },
+  notifItem: { padding: '10px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer' },
+  notifEmpty: { padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 },
   content: { flex: 1, padding: '24px 28px', overflowY: 'auto' },
 };

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import gcashQR from '../assets/gcash-qr.png';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { API, useAuth } from '../context/AuthContext';
@@ -203,11 +204,16 @@ export default function Donate() {
         {submitted && (
           <SuccessModal
             title="Donation Successful"
-            message={
-              form.type === 'Anonymous' || !form.donor_name.trim()
-                ? 'Thank you for your generous support. Your donation has been recorded and will help us care for rescued animals. A confirmation record has been saved for your reference.'
-                : `Thank you, ${form.donor_name.trim()}, for your generous support! Your donation has been recorded and will help us care for rescued animals. A confirmation record has been saved for your reference.`
-            }
+            message={(() => {
+              const campaign = campaigns.find(c => String(c.id) === String(form.campaign_id));
+              const namePart = (form.type === 'Anonymous' || !form.donor_name.trim())
+                ? 'Thank you'
+                : `Thank you, ${form.donor_name.trim()}`;
+              if (campaign) {
+                return `${namePart}, for donating to ${campaign.title}! Your donation has been recorded and will help us reach this campaign's goal. A confirmation record has been saved for your reference.`;
+              }
+              return `${namePart} for your generous support! Your donation has been recorded and will help us care for rescued animals. A confirmation record has been saved for your reference.`;
+            })()}
             onClose={() => setSubmitted(false)}
           />
         )}
@@ -379,25 +385,24 @@ export default function Donate() {
                 {/* Where to send the money */}
                 <div style={{
                   background: '#f0f9f1', border: '1.5px solid var(--primary)', borderRadius: 12,
-                  padding: '16px 18px', display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap',
+                  padding: '16px 18px', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap',
                 }}>
-                  <div style={{ fontSize: 28 }}>📱</div>
+                  <img
+                    src={gcashQR}
+                    alt="GCash QR code"
+                    style={{ width: 120, height: 120, borderRadius: 10, objectFit: 'contain', background: 'white', border: '1px solid var(--border)', flexShrink: 0 }}
+                  />
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-dark)', marginBottom: 2 }}>
-                      Send your donation via GCash
+                      Scan to donate via GCash
                     </div>
                     <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--primary)' }}>
                       0935 331 3599
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Account name: PETLINK Animal Shelter — then upload your receipt below.
+                      Account name: PETLINK Animal Shelter — scan the QR, then upload your receipt below.
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard?.writeText('09353313599')}
-                    style={{ border: '1.5px solid var(--primary)', background: 'white', color: 'var(--primary)', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-                  >Copy number</button>
                 </div>
 
                 <Field label="Upload Proof of Transaction Record" error={errors.proof}>
