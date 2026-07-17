@@ -10,6 +10,9 @@ const FALLBACK = 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w
 const TYPE_ORDER = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other'];
 const TYPE_LABELS = { Dog: '🐶 Dogs', Cat: '🐱 Cats', Bird: '🐦 Birds', Rabbit: '🐰 Rabbits', Other: '🐾 Other' };
 
+const ACTIVITY_TYPES = ['Feeding', 'Vet Visit', 'Medication', 'Grooming', 'Exercise', 'Training', 'Supplies Purchase', 'Other'];
+const FUND_SOURCES = ['Personal Funds', 'Shelter Funds', 'Donation Funds'];
+
 export default function FosterApplicants() {
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +21,13 @@ export default function FosterApplicants() {
   const [editPet, setEditPet] = useState(null);      // pet being edited
   const [toast, setToast] = useState('');
 
+  /* ─── ACTIVITY LOG STATE ─── */
+  const [activities, setActivities] = useState([]);
+  const [logPet, setLogPet] = useState(null);   // pet we're logging an activity for
+  const [actForm, setActForm] = useState({
+    activity_type: 'Feeding', description: '', activity_date: '', amount_spent: '', fund_source: '',
+  });
+
   const load = () => {
     setLoading(true);
     API.get('/adoptions/foster/my-pets')
@@ -25,13 +35,39 @@ export default function FosterApplicants() {
       .catch(() => {})
       .finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, []);
+  const loadActivities = () => {
+    API.get('/adoptions/foster/activities/my')
+      .then(({ data }) => setActivities(data))
+      .catch(() => setActivities([]));
+  };
+  useEffect(() => { load(); loadActivities(); }, []);
 
   const showToast = (msg, err = false) => { setToast({ msg, err }); setTimeout(() => setToast(''), 2800); };
 
   const openEdit = (pet) => {
     setViewPet(null);
     setEditPet(pet);
+  };
+
+  const openLog = (pet) => {
+    setActForm({
+      activity_type: 'Feeding', description: '',
+      activity_date: new Date().toISOString().slice(0, 10),
+      amount_spent: '', fund_source: '',
+    });
+    setLogPet(pet);
+  };
+
+  const handleLogActivity = async (e) => {
+    e.preventDefault();
+    try {
+      await API.post('/adoptions/foster/activities', { ...actForm, pet_id: logPet.id });
+      showToast('Activity logged.');
+      setLogPet(null);
+      loadActivities();
+    } catch (err) {
+      showToast(err?.response?.data?.error || 'Failed to log activity.', true);
+    }
   };
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
@@ -105,10 +141,13 @@ export default function FosterApplicants() {
                   </div>
 
                   {/* Buttons pinned to the bottom */}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 6 }}>
-                    <button className="btn btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setViewPet(p)}>View</button>
-                    <button className="btn btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => openEdit(p)}>Edit</button>
-                    <button className="btn btn-primary btn-sm" style={{ flex: 1.4, justifyContent: 'center' }} onClick={() => setSelected(p)}>Applicants</button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto', paddingTop: 6 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setViewPet(p)}>View</button>
+                      <button className="btn btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => openEdit(p)}>Edit</button>
+                      <button className="btn btn-primary btn-sm" style={{ flex: 1.4, justifyContent: 'center' }} onClick={() => setSelected(p)}>Applicants</button>
+                    </div>
+                    <button className="btn btn-success btn-sm" style={{ justifyContent: 'center' }} onClick={() => openLog(p)}>+ Log Activity</button>
                   </div>
                 </div>
               </div>
@@ -116,6 +155,97 @@ export default function FosterApplicants() {
           </div>
         </div>
       ))}
+
+      {/* ── MY ACTIVITY LOG ── */}
+      {activities.length > 0 && (
+        <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 16, background: '#fff', padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: "'Fraunces',serif" }}>My Activity Log</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              Total spent: <strong style={{ color: 'var(--text-dark)' }}>₱{activities.reduce((sum, a) => sum + Number(a.amount_spent || 0), 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+              {' '}across {activities.length} activit{activities.length === 1 ? 'y' : 'ies'}
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto', maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+            <table style={{ minWidth: 640 }}>
+              <thead>
+                <tr>
+                  <th>DATE</th><th>PET</th><th>ACTIVITY</th><th>DETAILS</th><th>AMOUNT</th><th>FUND SOURCE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activities.map(a => (
+                  <tr key={a.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{String(a.activity_date).slice(0, 10)}</td>
+                    <td style={{ fontWeight: 600 }}>{a.pet_name}</td>
+                    <td>{a.activity_type}</td>
+                    <td style={{ fontSize: 13, color: 'var(--text-mid)' }}>{a.description || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{a.amount_spent ? `₱${Number(a.amount_spent).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—'}</td>
+                    <td style={{ fontSize: 13 }}>{a.fund_source || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── LOG ACTIVITY MODAL ── */}
+      {logPet && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setLogPet(null)}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Log Activity — {logPet.name}</h2>
+              <button className="modal-close" onClick={() => setLogPet(null)}>✕</button>
+            </div>
+            <form onSubmit={handleLogActivity} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="form-group">
+                  <label className="form-label">Activity *</label>
+                  <select className="form-select" required value={actForm.activity_type}
+                    onChange={e => setActForm({ ...actForm, activity_type: e.target.value })}>
+                    {ACTIVITY_TYPES.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Date *</label>
+                  <input className="form-input" type="date" required value={actForm.activity_date}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => setActForm({ ...actForm, activity_date: e.target.value })} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">What did you do?</label>
+                <textarea className="form-input" rows={3} placeholder="e.g. Brought Max to the vet for his booster shot"
+                  value={actForm.description}
+                  onChange={e => setActForm({ ...actForm, description: e.target.value })} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="form-group">
+                  <label className="form-label">Amount Spent (₱)</label>
+                  <input className="form-input" type="number" min="0" step="0.01" placeholder="Leave blank if none"
+                    value={actForm.amount_spent}
+                    onChange={e => setActForm({ ...actForm, amount_spent: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Fund Source{Number(actForm.amount_spent) > 0 ? ' *' : ''}</label>
+                  <select className="form-select" value={actForm.fund_source}
+                    required={Number(actForm.amount_spent) > 0}
+                    disabled={!(Number(actForm.amount_spent) > 0)}
+                    onChange={e => setActForm({ ...actForm, fund_source: e.target.value })}>
+                    <option value="">—</option>
+                    {FUND_SOURCES.map(f => <option key={f}>{f}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-outline" onClick={() => setLogPet(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save Activity</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ── VIEW DETAILS MODAL ── */}
       {viewPet && (

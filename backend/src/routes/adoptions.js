@@ -340,4 +340,67 @@ router.get('/foster/my-pets', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── FOSTER: log an activity (what I did with a pet + any funds used) ───
+router.post('/foster/activities', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'foster') return res.status(403).json({ error: 'Fosters only' });
+    const { pet_id, activity_type, description, activity_date, amount_spent, fund_source } = req.body;
+
+    if (!pet_id || !activity_type || !activity_date) {
+      return res.status(400).json({ error: 'Pet, activity type, and date are required.' });
+    }
+    // The pet must actually be fostered by this user
+    const [own] = await db.query('SELECT id FROM pets WHERE id = ? AND fostered_by = ?', [pet_id, req.user.id]);
+    if (own.length === 0) return res.status(403).json({ error: 'Not your foster pet' });
+
+    let amt = null;
+    if (amount_spent !== undefined && amount_spent !== null && String(amount_spent).trim() !== '') {
+      amt = Number(amount_spent);
+      if (Number.isNaN(amt) || amt < 0) return res.status(400).json({ error: 'Amount spent must be a valid number.' });
+      if (amt === 0) amt = null; // "0" means no money was involved
+      if (amt > 0 && !fund_source) return res.status(400).json({ error: 'Please indicate where the funds came from.' });
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO foster_activities (pet_id, foster_id, activity_type, description, activity_date, amount_spent, fund_source)
+       VALUES (?,?,?,?,?,?,?)`,
+      [pet_id, req.user.id, activity_type, description || null, activity_date, amt, amt ? fund_source : null]
+    );
+    res.status(201).json({ id: result.insertId, message: 'Activity logged.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── FOSTER: my own activity log (with pet names, newest first) ───
+router.get('/foster/activities/my', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'foster') return res.status(403).json({ error: 'Fosters only' });
+    const [rows] = await db.query(
+      `SELECT fa.*, p.name AS pet_name, p.type AS pet_type
+       FROM foster_activities fa JOIN pets p ON fa.pet_id = p.id
+       WHERE fa.foster_id = ?
+       ORDER BY fa.activity_date DESC, fa.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── ADMIN: all foster activities (optionally within a date range, for the calendar) ───
+router.get('/foster/activities', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    let sql = `
+      SELECT fa.*, p.name AS pet_name, p.type AS pet_type,
+        CONCAT(u.first_name, ' ', u.last_name) AS foster_name
+      FROM foster_activities fa
+      JOIN pets p ON fa.pet_id = p.id
+      JOIN users u ON fa.foster_id = u.id`;
+    const params = [];
+    if (start && end) { sql += ' WHERE fa.activity_date BETWEEN ? AND ?'; params.push(start, end); }
+    sql += ' ORDER BY fa.activity_date DESC, fa.created_at DESC';
+    const [rows] = await db.query(sql, params);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

@@ -10,6 +10,8 @@ import { fileUrl } from '../../config';
 import { VOLUNTEER_ROLES, TIME_SLOTS } from '../../constants/roles';
 const DUTIES = VOLUNTEER_ROLES;
 const SCHED_COLORS = { Scheduled: '#e3f2fd', Completed: '#e8f5e9', Missed: '#fff3e0', Cancelled: '#fdecea' };
+const TASK_COLORS = { Pending: '#ede7f6', 'In Progress': '#fff8e1', Done: '#e8f5e9' };
+const ACTIVITY_CHIP = '#e0f2f1';
 
 const APPROVAL_CRITERIA = [
   'Contact information is complete (phone and email)',
@@ -104,6 +106,21 @@ export default function VolunteerRecords() {
     volunteer_id: '', duty: '', duty_date: '', time_start: '09:00', time_end: '12:00', notes: '',
   });
 
+  /* ─── TASKS + FOSTER ACTIVITY STATE ─── */
+  const [tasks, setTasks]           = useState([]);
+  const [fosterActs, setFosterActs] = useState([]);
+  const [taskDetail, setTaskDetail] = useState(null);
+  const [actDetail, setActDetail]   = useState(null);
+  const [showTask, setShowTask]     = useState(false);
+  const [taskForm, setTaskForm]     = useState({
+    title: '', details: '', task_date: '', time_start: '', time_end: '', priority: 'Medium', assignee: '',
+  });
+
+  /* ─── FOSTER ACTIVITY REPORT STATE (all activities, not just the visible month) ─── */
+  const [allActs, setAllActs]   = useState([]);
+  const [actSearch, setActSearch] = useState('');
+  const [actFund, setActFund]     = useState('All');
+
   const [stats, setStats] = useState({
     totalVolunteers:  { value: '—', weekDelta: null },
     activeThisMonth:  { value: '—', label: '' },
@@ -133,6 +150,10 @@ export default function VolunteerRecords() {
         });
       }
     }).finally(() => setLoading(false));
+    // Full activity list for the report (no date range = everything)
+    API.get('/adoptions/foster/activities')
+      .then(({ data }) => setAllActs(data))
+      .catch(() => setAllActs([]));
   }, []);
 
   /* ─── FETCH SCHEDULES (re-runs whenever the visible week changes) ─── */
@@ -143,6 +164,12 @@ export default function VolunteerRecords() {
     API.get(`/volunteers/schedules?start=${start}&end=${end}`)
       .then(({ data }) => setSchedules(data))
       .catch(() => setSchedules([]));
+    API.get(`/volunteers/tasks?start=${start}&end=${end}`)
+      .then(({ data }) => setTasks(data))
+      .catch(() => setTasks([]));
+    API.get(`/adoptions/foster/activities?start=${start}&end=${end}`)
+      .then(({ data }) => setFosterActs(data))
+      .catch(() => setFosterActs([]));
   };
   useEffect(() => { loadSchedules(); }, [calMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -242,6 +269,39 @@ export default function VolunteerRecords() {
     });
   };
 
+  /* ─── TASK ACTIONS ─── */
+  const handleAddTask = async (e) => {
+    e.preventDefault();
+    try {
+      await API.post('/volunteers/tasks', taskForm);
+      showToast('Task added!');
+      setShowTask(false);
+      setTaskForm({ title: '', details: '', task_date: '', time_start: '', time_end: '', priority: 'Medium', assignee: '' });
+      loadSchedules();
+    } catch (err) {
+      showToast(err?.response?.data?.error || 'Failed to add task.');
+    }
+  };
+
+  const handleTaskStatus = async (id, status) => {
+    try { await API.patch(`/volunteers/tasks/${id}/status`, { status }); } catch { /* demo */ }
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+    setTaskDetail(null);
+    showToast(`Task marked ${status}.`);
+  };
+
+  const handleDeleteTask = (t) => {
+    setConfirmState({
+      title: 'Remove this task?',
+      message: `"${t.title}" on ${String(t.task_date).slice(0, 10)} will be removed from the calendar.`,
+      onConfirm: async () => {
+        try { await API.delete(`/volunteers/tasks/${t.id}`); } catch { /* demo */ }
+        setTasks(prev => prev.filter(x => x.id !== t.id));
+        showToast('Task removed.');
+      },
+    });
+  };
+
   /* ─── EXPORT MASTERLIST AS CSV ─── */
   const exportCSV = () => {
     const header = ['#', 'Name', 'Email', 'Phone', 'Availability', 'Available Time', 'Role', 'Status', 'Start Date', 'Duties Assigned', 'Hours Completed'];
@@ -260,6 +320,24 @@ export default function VolunteerRecords() {
     a.click();
   };
 
+  /* ─── EXPORT FOSTER ACTIVITIES AS CSV ─── */
+  const exportActsCSV = () => {
+    const header = ['#', 'Date', 'Foster', 'Pet', 'Activity', 'Details', 'Amount Spent', 'Fund Source'];
+    const rows = filteredActs.map((a, i) => [
+      i + 1, String(a.activity_date).slice(0, 10), a.foster_name, `${a.pet_name} (${a.pet_type})`,
+      a.activity_type, a.description || '', a.amount_spent ? Number(a.amount_spent).toFixed(2) : '',
+      a.fund_source || '',
+    ]);
+    const csv = [header, ...rows]
+      .map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'foster_activity_report.csv';
+    a.click();
+  };
+
   /* ─── FILTERED DATA ─── */
   const filteredVols = volunteers.filter(v =>
     !volFilter || v.name?.toLowerCase().includes(volFilter.toLowerCase()) ||
@@ -270,6 +348,30 @@ export default function VolunteerRecords() {
     (!appFilter || a.name?.toLowerCase().includes(appFilter.toLowerCase()) ||
     a.preferred_role?.toLowerCase().includes(appFilter.toLowerCase()))
   );
+
+  /* ─── FOSTER ACTIVITY REPORT DATA ─── */
+  const filteredActs = allActs.filter(a =>
+    (actFund === 'All' || a.fund_source === actFund) &&
+    (!actSearch ||
+      a.foster_name?.toLowerCase().includes(actSearch.toLowerCase()) ||
+      a.pet_name?.toLowerCase().includes(actSearch.toLowerCase()) ||
+      a.activity_type?.toLowerCase().includes(actSearch.toLowerCase()))
+  );
+  const actTotal = filteredActs.reduce((sum, a) => sum + Number(a.amount_spent || 0), 0);
+  // Totals grouped per fund source (for the summary chips)
+  const fundTotals = filteredActs.reduce((acc, a) => {
+    if (a.amount_spent) acc[a.fund_source] = (acc[a.fund_source] || 0) + Number(a.amount_spent);
+    return acc;
+  }, {});
+  // Totals grouped per foster (who spent what, across how many activities)
+  const fosterTotals = Object.values(filteredActs.reduce((acc, a) => {
+    const key = a.foster_id;
+    if (!acc[key]) acc[key] = { name: a.foster_name, count: 0, spent: 0 };
+    acc[key].count += 1;
+    acc[key].spent += Number(a.amount_spent || 0);
+    return acc;
+  }, {})).sort((x, y) => y.spent - x.spent);
+  const peso = (n) => `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 
   /* ─── HELPERS ─── */
   const statusBadge = (st) => {
@@ -485,6 +587,7 @@ export default function VolunteerRecords() {
             <button className="btn btn-outline btn-sm" onClick={() => setCalMonth(addMonths(calMonth, 1))}>›</button>
             <button className="btn btn-outline btn-sm" onClick={() => setCalMonth(startOfMonth(new Date()))}>Today</button>
             <button className="btn btn-primary btn-sm" onClick={() => { setPickMonth(startOfMonth(new Date())); setShowAssign(true); }}>+ Assign Duty</button>
+            <button className="btn btn-outline btn-sm" onClick={() => { setTaskForm(f => ({ ...f, task_date: f.task_date || fmtDate(new Date()) })); setShowTask(true); }}>+ Add Task</button>
           </div>
         </div>
 
@@ -504,6 +607,19 @@ export default function VolunteerRecords() {
             const inMonth = day.getMonth() === calMonth.getMonth();
             const isToday = dayStr === fmtDate(new Date());
             const daySchedules = schedules.filter(sc => String(sc.duty_date).slice(0, 10) === dayStr);
+            const dayTasks     = tasks.filter(t => String(t.task_date).slice(0, 10) === dayStr);
+            const dayActs      = fosterActs.filter(a => String(a.activity_date).slice(0, 10) === dayStr);
+            // One merged list so duties, tasks, and foster activities all share the same day cell
+            const dayItems = [
+              ...daySchedules.map(x => ({ kind: 'duty', data: x })),
+              ...dayTasks.map(x => ({ kind: 'task', data: x })),
+              ...dayActs.map(x => ({ kind: 'activity', data: x })),
+            ];
+            const openItem = (item) => {
+              if (item.kind === 'duty') setDutyDetail(item.data);
+              else if (item.kind === 'task') setTaskDetail(item.data);
+              else setActDetail(item.data);
+            };
             return (
               <div
                 key={i}
@@ -525,32 +641,56 @@ export default function VolunteerRecords() {
               >
                 <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5, color: isToday ? 'var(--primary)' : 'var(--text-mid)', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{day.getDate()}</span>
-                  {daySchedules.length > 0 && (
-                    <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>{daySchedules.length}</span>
+                  {dayItems.length > 0 && (
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>{dayItems.length}</span>
                   )}
                 </div>
-                {daySchedules.slice(0, 3).map(sc => (
+                {dayItems.slice(0, 3).map((item) => {
+                  const d = item.data;
+                  if (item.kind === 'duty') {
+                    return (
+                      <div key={`d${d.id}`} onClick={e => { e.stopPropagation(); setDutyDetail(d); }} title={`${d.duty} — ${d.volunteer_name}`}
+                        style={{
+                          background: SCHED_COLORS[d.status] || '#eee',
+                          borderLeft: `3px solid ${d.status === 'Completed' ? '#2e7d32' : d.status === 'Missed' ? '#e65100' : d.status === 'Cancelled' ? '#c62828' : '#1565c0'}`,
+                          borderRadius: 5, padding: '3px 6px', marginBottom: 3, fontSize: 11, lineHeight: 1.3,
+                          overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer',
+                        }}>
+                        <span style={{ fontWeight: 700 }}>{String(d.time_start).slice(0, 5)}</span> {d.duty} · {d.volunteer_name?.split(' ')[0]}
+                      </div>
+                    );
+                  }
+                  if (item.kind === 'task') {
+                    return (
+                      <div key={`t${d.id}`} onClick={e => { e.stopPropagation(); setTaskDetail(d); }} title={`Task: ${d.title}`}
+                        style={{
+                          background: TASK_COLORS[d.status] || '#ede7f6',
+                          borderLeft: `3px solid ${d.status === 'Done' ? '#2e7d32' : d.priority === 'High' ? '#c62828' : '#6a1b9a'}`,
+                          borderRadius: 5, padding: '3px 6px', marginBottom: 3, fontSize: 11, lineHeight: 1.3,
+                          overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer',
+                          textDecoration: d.status === 'Done' ? 'line-through' : 'none',
+                        }}>
+                        📌 {d.title}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={`a${d.id}`} onClick={e => { e.stopPropagation(); setActDetail(d); }} title={`${d.activity_type} — ${d.pet_name} (${d.foster_name})`}
+                      style={{
+                        background: ACTIVITY_CHIP, borderLeft: '3px solid #00695c',
+                        borderRadius: 5, padding: '3px 6px', marginBottom: 3, fontSize: 11, lineHeight: 1.3,
+                        overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer',
+                      }}>
+                      🐾 {d.activity_type} · {d.pet_name}
+                    </div>
+                  );
+                })}
+                {dayItems.length > 3 && (
                   <div
-                    key={sc.id}
-                    onClick={e => { e.stopPropagation(); setDutyDetail(sc); }}
-                    title={`${sc.duty} — ${sc.volunteer_name}`}
-                    style={{
-                      background: SCHED_COLORS[sc.status] || '#eee',
-                      borderLeft: `3px solid ${sc.status === 'Completed' ? '#2e7d32' : sc.status === 'Missed' ? '#e65100' : sc.status === 'Cancelled' ? '#c62828' : '#1565c0'}`,
-                      borderRadius: 5, padding: '3px 6px', marginBottom: 3,
-                      fontSize: 11, lineHeight: 1.3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span style={{ fontWeight: 700 }}>{String(sc.time_start).slice(0, 5)}</span> {sc.duty} · {sc.volunteer_name?.split(' ')[0]}
-                  </div>
-                ))}
-                {daySchedules.length > 3 && (
-                  <div
-                    onClick={e => { e.stopPropagation(); setDutyDetail(daySchedules[3]); }}
+                    onClick={e => { e.stopPropagation(); openItem(dayItems[3]); }}
                     style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--primary)', cursor: 'pointer', paddingLeft: 2 }}
                   >
-                    +{daySchedules.length - 3} more
+                    +{dayItems.length - 3} more
                   </div>
                 )}
               </div>
@@ -565,7 +705,93 @@ export default function VolunteerRecords() {
               <span style={{ width: 10, height: 10, borderRadius: 3, background: c, display: 'inline-block', border: '1px solid var(--border)' }} />{k}
             </span>
           ))}
-          <span style={{ marginLeft: 'auto' }}>Tip: click a day to assign a duty · click a duty to manage it</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: '#ede7f6', display: 'inline-block', border: '1px solid var(--border)' }} />📌 Task
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: ACTIVITY_CHIP, display: 'inline-block', border: '1px solid var(--border)' }} />🐾 Foster Activity
+          </span>
+          <span style={{ marginLeft: 'auto' }}>Tip: click a day to assign a duty · click any item to manage it</span>
+        </div>
+      </div>
+
+      {/* ─── FOSTER ACTIVITY REPORT ─── */}
+      <div className="card">
+        <div style={s.tableHeader}>
+          <h2 style={s.sectionTitle}>Foster Activity Report</h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select
+              className="form-select"
+              value={actFund}
+              onChange={e => setActFund(e.target.value)}
+              style={{ height: 32, fontSize: 13, width: 'auto', minWidth: 150, padding: '0 28px 0 10px' }}
+            >
+              {['All', 'Personal Funds', 'Shelter Funds', 'Donation Funds'].map(x => <option key={x}>{x}</option>)}
+            </select>
+            <input
+              className="form-input"
+              placeholder="Search foster, pet, or activity…"
+              value={actSearch}
+              onChange={e => setActSearch(e.target.value)}
+              style={{ height: 32, fontSize: 13, width: 200 }}
+            />
+            <button className="btn btn-outline btn-sm" onClick={exportActsCSV}>⬇ Export CSV</button>
+          </div>
+        </div>
+
+        {/* Summary: overall + per fund source */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div style={{ background: '#e8f5e9', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', fontSize: 13 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Total Spent:</span>{' '}
+            <strong>{peso(actTotal)}</strong>
+            <span style={{ color: 'var(--text-muted)' }}> · {filteredActs.length} activit{filteredActs.length === 1 ? 'y' : 'ies'}</span>
+          </div>
+          {Object.entries(fundTotals).map(([src, amt]) => (
+            <div key={src} style={{ background: '#f9fafb', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', fontSize: 13 }}>
+              <span style={{ color: 'var(--text-muted)' }}>{src}:</span> <strong>{peso(amt)}</strong>
+            </div>
+          ))}
+        </div>
+
+        {/* Per-foster totals */}
+        {fosterTotals.length > 0 && (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+            {fosterTotals.map(f => (
+              <div key={f.name} style={{ background: '#e0f2f1', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', fontSize: 13 }}>
+                🐾 <strong>{f.name}</strong>
+                <span style={{ color: 'var(--text-muted)' }}> — {f.count} activit{f.count === 1 ? 'y' : 'ies'}, {peso(f.spent)} spent</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={s.scrollTable}>
+          <table style={{ minWidth: 820 }}>
+            <thead>
+              <tr>
+                <th>DATE</th><th>FOSTER</th><th>PET</th><th>ACTIVITY</th>
+                <th>DETAILS</th><th>AMOUNT</th><th>FUND SOURCE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredActs.length === 0 ? (
+                <tr><td colSpan={7} style={s.empty}>No foster activities logged yet.</td></tr>
+              ) : filteredActs.map(a => (
+                <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => setActDetail(a)}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{String(a.activity_date).slice(0, 10)}</td>
+                  <td style={{ fontWeight: 600 }}>{a.foster_name}</td>
+                  <td>{a.pet_name} <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>({a.pet_type})</span></td>
+                  <td>{a.activity_type}</td>
+                  <td style={{ fontSize: 13, color: 'var(--text-mid)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.description || '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{a.amount_spent ? peso(a.amount_spent) : '—'}</td>
+                  <td style={{ fontSize: 13 }}>{a.fund_source || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8 }}>
+          Tip: click a row to see the full activity details.
         </div>
       </div>
 
@@ -599,6 +825,132 @@ export default function VolunteerRecords() {
               <button className="btn btn-danger btn-sm" onClick={() => { setDutyDetail(null); handleDeleteSchedule(dutyDetail); }}>Remove</button>
               <button className="btn btn-outline btn-sm" onClick={() => setDutyDetail(null)}>Close</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TASK DETAIL MODAL */}
+      {taskDetail && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setTaskDetail(null)}>
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">📌 {taskDetail.title}</h2>
+              <button className="modal-close" onClick={() => setTaskDetail(null)}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
+              {[['Date', String(taskDetail.task_date).slice(0, 10)],
+                ['Time', taskDetail.time_start ? `${String(taskDetail.time_start).slice(0, 5)}${taskDetail.time_end ? ` – ${String(taskDetail.time_end).slice(0, 5)}` : ''}` : 'Any time'],
+                ['Priority', taskDetail.priority],
+                ['Assigned To', taskDetail.assignee || '—'],
+                ['Status', taskDetail.status],
+                ['Details', taskDetail.details || '—'],
+                ['Created By', taskDetail.created_by_name || '—']].map(([l, v]) => (
+                <div key={l} style={s.detailRow}>
+                  <span style={s.detailLbl}>{l}</span>
+                  <span style={{ flex: 1 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              {taskDetail.status !== 'Done' && (
+                <>
+                  {taskDetail.status === 'Pending' && (
+                    <button className="btn btn-outline btn-sm" onClick={() => handleTaskStatus(taskDetail.id, 'In Progress')}>Start</button>
+                  )}
+                  <button className="btn btn-success btn-sm" onClick={() => handleTaskStatus(taskDetail.id, 'Done')}>✓ Done</button>
+                </>
+              )}
+              <button className="btn btn-danger btn-sm" onClick={() => { setTaskDetail(null); handleDeleteTask(taskDetail); }}>Remove</button>
+              <button className="btn btn-outline btn-sm" onClick={() => setTaskDetail(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FOSTER ACTIVITY DETAIL MODAL */}
+      {actDetail && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setActDetail(null)}>
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">🐾 {actDetail.activity_type}</h2>
+              <button className="modal-close" onClick={() => setActDetail(null)}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
+              {[['Foster', actDetail.foster_name],
+                ['Pet', `${actDetail.pet_name} (${actDetail.pet_type})`],
+                ['Date', String(actDetail.activity_date).slice(0, 10)],
+                ['What They Did', actDetail.description || '—'],
+                ['Amount Spent', actDetail.amount_spent ? `₱${Number(actDetail.amount_spent).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : 'No funds used'],
+                ['Fund Source', actDetail.fund_source || '—']].map(([l, v]) => (
+                <div key={l} style={s.detailRow}>
+                  <span style={s.detailLbl}>{l}</span>
+                  <span style={{ flex: 1 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline btn-sm" onClick={() => setActDetail(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD TASK MODAL */}
+      {showTask && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowTask(false)}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Add Task</h2>
+              <button className="modal-close" onClick={() => setShowTask(false)}>✕</button>
+            </div>
+            <form onSubmit={handleAddTask} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Task Title *</label>
+                <input className="form-input" required placeholder="e.g. Restock dog food, Deep-clean Kennel B"
+                  value={taskForm.title}
+                  onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Details</label>
+                <textarea className="form-input" rows={3} placeholder="Anything the person doing this task should know"
+                  value={taskForm.details}
+                  onChange={e => setTaskForm({ ...taskForm, details: e.target.value })} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="form-group">
+                  <label className="form-label">Date *</label>
+                  <input className="form-input" type="date" required value={taskForm.task_date}
+                    onChange={e => setTaskForm({ ...taskForm, task_date: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Priority</label>
+                  <select className="form-select" value={taskForm.priority}
+                    onChange={e => setTaskForm({ ...taskForm, priority: e.target.value })}>
+                    {['Low', 'Medium', 'High'].map(p => <option key={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Start Time</label>
+                  <input className="form-input" type="time" value={taskForm.time_start}
+                    onChange={e => setTaskForm({ ...taskForm, time_start: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">End Time</label>
+                  <input className="form-input" type="time" value={taskForm.time_end}
+                    onChange={e => setTaskForm({ ...taskForm, time_end: e.target.value })} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Assigned To</label>
+                <input className="form-input" placeholder="Optional — a name or team, blank means anyone"
+                  value={taskForm.assignee}
+                  onChange={e => setTaskForm({ ...taskForm, assignee: e.target.value })} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-outline" onClick={() => setShowTask(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Task</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

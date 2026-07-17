@@ -271,6 +271,62 @@ router.delete('/schedules/:id', authMiddleware, adminMiddleware, async (req, res
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ================== CALENDAR TASKS (to-do list shown on the duty calendar) ==================
+
+// List tasks within a date range (for the monthly calendar)
+router.get('/tasks', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    const [rows] = await db.query(
+      `SELECT t.*, CONCAT(u.first_name, ' ', u.last_name) AS created_by_name
+       FROM calendar_tasks t
+       LEFT JOIN users u ON t.created_by = u.id
+       WHERE t.task_date BETWEEN ? AND ?
+       ORDER BY t.task_date, t.time_start IS NULL, t.time_start`,
+      [start, end]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Create a task
+router.post('/tasks', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { title, details, task_date, time_start, time_end, priority, assignee } = req.body;
+    if (!title || !String(title).trim()) return res.status(400).json({ error: 'Task title is required.' });
+    if (!task_date) return res.status(400).json({ error: 'Task date is required.' });
+    if (time_start && time_end && time_end <= time_start) {
+      return res.status(400).json({ error: 'End time must be after start time.' });
+    }
+    const [result] = await db.query(
+      `INSERT INTO calendar_tasks (title, details, task_date, time_start, time_end, priority, assignee, created_by)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [String(title).trim(), details || null, task_date, time_start || null, time_end || null, priority || 'Medium', assignee || null, req.user.id]
+    );
+    res.status(201).json({ id: result.insertId, message: 'Task added.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Update a task's status (Pending / In Progress / Done)
+router.patch('/tasks/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['Pending', 'In Progress', 'Done'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status.' });
+    }
+    await db.query('UPDATE calendar_tasks SET status = ? WHERE id = ?', [status, req.params.id]);
+    res.json({ message: `Task marked ${status}.` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Delete a task
+router.delete('/tasks/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await db.query('DELETE FROM calendar_tasks WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Task removed.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ================== NOTIFICATIONS ==================
 
 // Get the logged-in user's notifications (newest first)
